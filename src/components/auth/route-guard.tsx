@@ -1,39 +1,42 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
-import { isAuthenticated as checkAuth } from "@/lib/auth";
+import { isAuthenticated as checkAuth, getToken } from "@/lib/auth";
 
 export function RouteGuard({ children }: { children: React.ReactNode }) {
   const { isAuthenticated: authContextAuth, isLoading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
-    // Double-check authentication status from localStorage
+    // Check authentication from both localStorage and cookies
     const hasAuth = checkAuth();
+    const token = getToken();
     
     // Skip check for sign-in page
     if (pathname === "/sign-in") {
-      // If authenticated, redirect to dashboard
-      if (!isLoading && hasAuth) {
-        router.replace("/");
+      // If authenticated (via localStorage or cookie), redirect to dashboard
+      if (!isLoading && (hasAuth || token)) {
+        const redirect = searchParams.get("redirect") || "/";
+        router.replace(redirect);
       }
       setIsChecking(false);
       return;
     }
 
     // Protect all other routes
-    if (!isLoading && !hasAuth) {
+    if (!isLoading && !hasAuth && !token) {
       router.replace(`/sign-in?redirect=${encodeURIComponent(pathname)}`);
       setIsChecking(false);
       return;
     }
 
     setIsChecking(false);
-  }, [authContextAuth, isLoading, pathname, router]);
+  }, [authContextAuth, isLoading, pathname, router, searchParams]);
 
   // Show loading state while checking authentication
   if (isLoading || isChecking) {
