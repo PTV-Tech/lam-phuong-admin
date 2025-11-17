@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Suspense } from "react";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { AuthProvider } from "@/contexts/auth-context";
@@ -32,7 +33,15 @@ export default function RootLayout({
       >
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <AuthProvider>
-            <RouteGuard>{children}</RouteGuard>
+            <Suspense
+              fallback={
+                <div className="flex min-h-screen items-center justify-center">
+                  <div className="text-muted-foreground">Đang tải...</div>
+                </div>
+              }
+            >
+              <RouteGuard>{children}</RouteGuard>
+            </Suspense>
           </AuthProvider>
         </ThemeProvider>
       </body>
