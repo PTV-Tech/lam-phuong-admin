@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
   MapPin,
+  Users,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -28,6 +29,11 @@ const navItems: NavItem[] = [
     title: "Địa điểm",
     href: "/locations",
     icon: MapPin,
+  },
+  {
+    title: "Người dùng",
+    href: "/users",
+    icon: Users,
   },
 ];
 
