@@ -1,9 +1,11 @@
+import { cookies } from "next/headers";
 import { SummaryCards } from "@/components/dashboard/summary-cards";
 import { RecentOrdersTable } from "@/components/dashboard/recent-orders";
 import { PendingApprovals } from "@/components/dashboard/pending-approvals";
 import { ApiHealthCard } from "@/components/dashboard/api-health-card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { UserMenu } from "@/components/auth/user-menu";
+import type { User } from "@/types/auth";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,7 +42,22 @@ const iconMap: Record<string, LucideIcon> = {
 };
 
 export default async function DashboardPage() {
-  const dashboard = await fetchDashboardData();
+  const cookieStore = await cookies();
+  const token = cookieStore.get("lp_auth_token")?.value;
+  const userCookie = cookieStore.get("lp_auth_user")?.value;
+  
+  // Parse user data from cookie
+  let user: User | null = null;
+  if (userCookie) {
+    try {
+      user = JSON.parse(decodeURIComponent(userCookie)) as User;
+    } catch {
+      // Invalid user data in cookie
+      user = null;
+    }
+  }
+  
+  const dashboard = await fetchDashboardData(token || undefined);
 
   const cards = dashboard.stats.map((stat) => ({
     ...stat,
@@ -91,9 +108,7 @@ export default async function DashboardPage() {
               Xuất báo cáo
             </Button>
             <ModeToggle />
-            <Avatar className="h-9 w-9 bg-muted">
-              <AvatarFallback>LP</AvatarFallback>
-            </Avatar>
+            <UserMenu user={user} />
           </div>
         </header>
 

@@ -1,4 +1,5 @@
 import type { DashboardData } from "@/types/dashboard";
+import { getToken } from "./auth";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_LP_API_URL;
 
@@ -98,17 +99,43 @@ const FALLBACK_DASHBOARD: DashboardData = {
   lastSyncedAt: "2025-11-14T02:50:00.000Z",
 };
 
-export async function fetchDashboardData(): Promise<DashboardData> {
+export async function fetchDashboardData(token?: string): Promise<DashboardData> {
   try {
     if (!API_BASE_URL) {
       return FALLBACK_DASHBOARD;
     }
 
+    const headers: HeadersInit = {
+      "Content-Type": "application/json",
+    };
+
+    // Use provided token (from server) or get from storage (for client-side)
+    const authToken = token || (typeof window !== "undefined" ? getToken() : null);
+    if (authToken) {
+      headers.Authorization = `Bearer ${authToken}`;
+    }
+
     const response = await fetch(`${API_BASE_URL}/admin/dashboard`, {
-      next: { revalidate: 60 },
+      headers,
+      cache: "no-store", // Don't cache authenticated requests
     });
 
+    if (response.status === 401) {
+      // Unauthorized - clear auth and redirect (client-side only)
+      if (typeof window !== "undefined") {
+        const { clearAuth } = await import("./auth");
+        clearAuth();
+        window.location.href = "/sign-in";
+      }
+      // On server, return fallback data
+      return FALLBACK_DASHBOARD;
+    }
+
     if (!response.ok) {
+      // For 404 or other errors, return fallback data
+      if (response.status === 404) {
+        return FALLBACK_DASHBOARD;
+      }
       throw new Error(`Failed to load dashboard (${response.status})`);
     }
 

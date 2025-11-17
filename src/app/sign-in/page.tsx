@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,15 +14,11 @@ import {
 } from "@/components/ui/card";
 import { LogIn } from "lucide-react";
 import { ModeToggle } from "@/components/theme/mode-toggle";
+import { useAuth } from "@/contexts/auth-context";
 
 interface ValidationErrors {
   email?: string;
   password?: string;
-}
-
-interface PasswordStrength {
-  score: number;
-  feedback: string[];
 }
 
 interface FormState {
@@ -31,8 +28,6 @@ interface FormState {
 
 // Constants
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const MIN_PASSWORD_LENGTH = 8;
-const REQUIRED_PASSWORD_SCORE = 5;
 
 // Validation functions (moved outside component for better performance)
 const validateEmail = (emailValue: string): string | undefined => {
@@ -45,86 +40,24 @@ const validateEmail = (emailValue: string): string | undefined => {
   return undefined;
 };
 
-const validatePasswordStrength = (passwordValue: string): PasswordStrength => {
-  const feedback: string[] = [];
-  let score = 0;
-
-  const checks = [
-    {
-      test: passwordValue.length >= MIN_PASSWORD_LENGTH,
-      message: "Mật khẩu phải có ít nhất 8 ký tự",
-    },
-    {
-      test: /[a-z]/.test(passwordValue),
-      message: "Mật khẩu phải có ít nhất một chữ cái thường",
-    },
-    {
-      test: /[A-Z]/.test(passwordValue),
-      message: "Mật khẩu phải có ít nhất một chữ cái hoa",
-    },
-    {
-      test: /[0-9]/.test(passwordValue),
-      message: "Mật khẩu phải có ít nhất một số",
-    },
-    {
-      test: /[^a-zA-Z0-9]/.test(passwordValue),
-      message: "Mật khẩu phải có ít nhất một ký tự đặc biệt",
-    },
-  ];
-
-  checks.forEach(({ test, message }) => {
-    if (test) {
-      score += 1;
-    } else {
-      feedback.push(message);
-    }
-  });
-
-  return { score, feedback };
-};
-
 const validatePassword = (passwordValue: string): string | undefined => {
   if (!passwordValue.trim()) {
     return "Mật khẩu là bắt buộc";
   }
-  const strength = validatePasswordStrength(passwordValue);
-  if (strength.score < REQUIRED_PASSWORD_SCORE) {
-    return strength.feedback[0];
-  }
   return undefined;
 };
 
-// Password Strength Indicator Component
-const PasswordStrengthIndicator = ({ password }: { password: string }) => {
-  const strength = useMemo(
-    () => validatePasswordStrength(password),
-    [password]
-  );
-
-  return (
-    <div className="space-y-1">
-      <p className="text-sm text-muted-foreground">Độ mạnh mật khẩu:</p>
-      <div className="flex gap-1">
-        {Array.from({ length: REQUIRED_PASSWORD_SCORE }).map((_, i) => (
-          <div
-            key={i}
-            className={`h-1 flex-1 rounded transition-colors ${
-              i < strength.score ? "bg-green-500" : "bg-muted"
-            }`}
-          />
-        ))}
-      </div>
-    </div>
-  );
-};
-
 export default function SignInPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { signIn } = useAuth();
   const [formState, setFormState] = useState<FormState>({
     email: "",
     password: "",
   });
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<ValidationErrors>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [touched, setTouched] = useState<{
     email: boolean;
     password: boolean;
@@ -174,6 +107,7 @@ export default function SignInPage() {
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
+      setSubmitError(null);
 
       setTouched({ email: true, password: true });
 
@@ -190,19 +124,29 @@ export default function SignInPage() {
 
       setIsLoading(true);
 
-      const payload = {
-        email: formState.email,
-        password: formState.password,
-      };
+      try {
+        const payload = {
+          email: formState.email,
+          password: formState.password,
+        };
 
-      console.log("Sign in payload:", payload);
+        console.log("Sign in payload:", payload);
 
-      // Simulate API call
-      setTimeout(() => {
+        await signIn(payload);
+
+        // Redirect will be handled by RouteGuard after auth state updates
+        // But we can also redirect here for immediate feedback
+        const redirect = searchParams.get("redirect") || "/";
+        router.push(redirect);
+        router.refresh();
+      } catch (error) {
+        setSubmitError(
+          error instanceof Error ? error.message : "Đăng nhập thất bại"
+        );
         setIsLoading(false);
-      }, 1000);
+      }
     },
-    [formState.email, formState.password]
+    [formState.email, formState.password, signIn, router, searchParams]
   );
 
   const isFormValid = useMemo(
@@ -213,9 +157,6 @@ export default function SignInPage() {
       formState.password.trim(),
     [errors.email, errors.password, formState.email, formState.password]
   );
-
-  const showPasswordStrength =
-    formState.password && touched.password && !errors.password;
 
   return (
     <div className="relative flex min-h-screen items-center justify-center bg-muted/30 p-4">
@@ -277,10 +218,12 @@ export default function SignInPage() {
                   {errors.password}
                 </p>
               )}
-              {showPasswordStrength && (
-                <PasswordStrengthIndicator password={formState.password} />
-              )}
             </div>
+            {submitError && (
+              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                {submitError}
+              </div>
+            )}
             <Button
               type="submit"
               className="w-full"
