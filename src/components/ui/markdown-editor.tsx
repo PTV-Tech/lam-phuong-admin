@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import dynamic from "next/dynamic";
-import type { SimpleMDE } from "easymde";
+import type { Options } from "easymde";
 
 // Dynamically import SimpleMDE to avoid SSR issues
 const SimpleMDE = dynamic(() => import("react-simplemde-editor"), {
@@ -42,7 +42,7 @@ export function MarkdownEditor({
         "preview",
         "guide",
       ],
-    } as SimpleMDE.Options;
+    } as Options;
   }, [placeholder]);
 
   return (

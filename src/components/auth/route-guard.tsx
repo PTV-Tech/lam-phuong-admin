@@ -19,12 +19,18 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     // Skip check for public pages
     if (isPublicPage) {
       // For sign-in page, if authenticated, redirect to dashboard
+      // BUT: Don't redirect if user was redirected here due to unauthorized (401)
       if (pathname === "/sign-in" && !isLoading) {
-        const hasAuth = checkAuth();
-        const token = getToken();
-        if (hasAuth || token) {
-          const redirect = searchParams.get("redirect") || "/";
-          router.replace(redirect);
+        const isUnauthorized = searchParams.get("unauthorized") === "true";
+        // If user was redirected due to 401, don't redirect them away
+        // They need to sign in again
+        if (!isUnauthorized) {
+          const hasAuth = checkAuth();
+          const token = getToken();
+          if (hasAuth || token) {
+            const redirect = searchParams.get("redirect") || "/";
+            router.replace(redirect);
+          }
         }
       }
       // Use setTimeout to defer state update for public pages

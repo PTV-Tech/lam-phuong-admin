@@ -1,4 +1,4 @@
-import { getToken } from "./auth";
+import { fetchApi } from "./api";
 import type {
   JobCategory,
   CreateJobCategoryRequest,
@@ -16,20 +16,14 @@ export async function getJobCategories(token?: string): Promise<JobCategory[]> {
     return [];
   }
 
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  };
-
-  const authToken = token || (typeof window !== "undefined" ? getToken() : null);
-  if (authToken) {
-    headers.Authorization = `Bearer ${authToken}`;
-  }
-
   try {
-    const response = await fetch(`${API_BASE_URL}/job-categories`, {
-      headers,
-      cache: "no-store",
-    });
+    const response = await fetchApi(
+      `${API_BASE_URL}/job-categories`,
+      {
+        cache: "no-store",
+      },
+      token
+    );
 
     // Handle 404 as empty array (no job categories exist yet)
     if (response.status === 404) {
@@ -37,9 +31,6 @@ export async function getJobCategories(token?: string): Promise<JobCategory[]> {
     }
 
     if (!response.ok) {
-      if (response.status === 401) {
-        throw new Error("Unauthorized");
-      }
       // Try to parse error response
       try {
         const errorData = (await response.json()) as JobCategoryError;
@@ -61,7 +52,7 @@ export async function getJobCategories(token?: string): Promise<JobCategory[]> {
     // If response format is unexpected but status is OK, return empty array
     return [];
   } catch (error) {
-    // If it's a known error, rethrow it
+    // If it's an Unauthorized error, it's already handled by fetchApi (redirects to sign-in)
     if (error instanceof Error && error.message === "Unauthorized") {
       throw error;
     }
@@ -79,20 +70,14 @@ export async function createJobCategory(
     throw new Error("API base URL is not configured");
   }
 
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  };
-
-  const authToken = token || (typeof window !== "undefined" ? getToken() : null);
-  if (authToken) {
-    headers.Authorization = `Bearer ${authToken}`;
-  }
-
-  const response = await fetch(`${API_BASE_URL}/job-categories`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(jobCategory),
-  });
+  const response = await fetchApi(
+    `${API_BASE_URL}/job-categories`,
+    {
+      method: "POST",
+      body: JSON.stringify(jobCategory),
+    },
+    token
+  );
 
   const data = (await response.json()) as CreateJobCategoryResponse | JobCategoryError;
 
@@ -118,24 +103,15 @@ export async function deleteJobCategory(
     throw new Error("API base URL is not configured");
   }
 
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  };
-
-  const authToken = token || (typeof window !== "undefined" ? getToken() : null);
-  if (authToken) {
-    headers.Authorization = `Bearer ${authToken}`;
-  }
-
-  const response = await fetch(`${API_BASE_URL}/job-categories/${slug}`, {
-    method: "DELETE",
-    headers,
-  });
+  const response = await fetchApi(
+    `${API_BASE_URL}/job-categories/${slug}`,
+    {
+      method: "DELETE",
+    },
+    token
+  );
 
   if (!response.ok) {
-    if (response.status === 401) {
-      throw new Error("Unauthorized");
-    }
     const errorData = (await response.json()) as JobCategoryError;
     if ("error" in errorData) {
       throw new Error(errorData.error.message || "Failed to delete job category");

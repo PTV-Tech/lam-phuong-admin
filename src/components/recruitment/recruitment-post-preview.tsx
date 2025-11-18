@@ -57,10 +57,13 @@ export function RecruitmentPostPreview({
   }, [formData.productGroupIds, productGroups]);
 
   // Render markdown to HTML
-  const renderMarkdown = (markdown: string | undefined) => {
-    if (!markdown || !markdown.trim()) return null;
+  const renderMarkdown = (markdown: string | undefined): { __html: string } | undefined => {
+    if (!markdown || !markdown.trim()) return undefined;
     try {
-      return { __html: marked.parse(markdown) };
+      const html = marked.parse(markdown);
+      // Ensure we have a string, not a Promise
+      const htmlString = typeof html === 'string' ? html : String(html);
+      return { __html: htmlString };
     } catch (error) {
       return { __html: markdown };
     }

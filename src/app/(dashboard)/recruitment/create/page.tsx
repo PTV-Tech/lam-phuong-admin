@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { CreateRecruitmentPostPageClient } from "@/components/recruitment/create-recruitment-post-page-client";
 import { getLocations } from "@/lib/locations";
 import { getJobCategories } from "@/lib/job-categories";
@@ -27,6 +28,10 @@ export default async function CreateRecruitmentPostPage() {
       getProductGroups(token || undefined),
     ]);
   } catch (error) {
+    // Redirect to sign-in on unauthorized error
+    if (error instanceof Error && error.message === "Unauthorized") {
+      redirect("/sign-in?unauthorized=true");
+    }
     // Continue with empty arrays on error
     if (error instanceof Error && error.message !== "Unauthorized") {
       console.error("Failed to fetch options:", error);

@@ -1,4 +1,4 @@
-import { getToken } from "./auth";
+import { fetchApi } from "./api";
 import type {
   Location,
   CreateLocationRequest,
@@ -16,20 +16,14 @@ export async function getLocations(token?: string): Promise<Location[]> {
     return [];
   }
 
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  };
-
-  const authToken = token || (typeof window !== "undefined" ? getToken() : null);
-  if (authToken) {
-    headers.Authorization = `Bearer ${authToken}`;
-  }
-
   try {
-    const response = await fetch(`${API_BASE_URL}/locations`, {
-      headers,
-      cache: "no-store",
-    });
+    const response = await fetchApi(
+      `${API_BASE_URL}/locations`,
+      {
+        cache: "no-store",
+      },
+      token
+    );
 
     // Handle 404 as empty array (no locations exist yet)
     if (response.status === 404) {
@@ -37,9 +31,6 @@ export async function getLocations(token?: string): Promise<Location[]> {
     }
 
     if (!response.ok) {
-      if (response.status === 401) {
-        throw new Error("Unauthorized");
-      }
       // Try to parse error response
       try {
         const errorData = (await response.json()) as LocationError;
@@ -61,7 +52,7 @@ export async function getLocations(token?: string): Promise<Location[]> {
     // If response format is unexpected but status is OK, return empty array
     return [];
   } catch (error) {
-    // If it's a known error, rethrow it
+    // If it's an Unauthorized error, it's already handled by fetchApi (redirects to sign-in)
     if (error instanceof Error && error.message === "Unauthorized") {
       throw error;
     }
@@ -79,20 +70,14 @@ export async function createLocation(
     throw new Error("API base URL is not configured");
   }
 
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  };
-
-  const authToken = token || (typeof window !== "undefined" ? getToken() : null);
-  if (authToken) {
-    headers.Authorization = `Bearer ${authToken}`;
-  }
-
-  const response = await fetch(`${API_BASE_URL}/locations`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(location),
-  });
+  const response = await fetchApi(
+    `${API_BASE_URL}/locations`,
+    {
+      method: "POST",
+      body: JSON.stringify(location),
+    },
+    token
+  );
 
   const data = (await response.json()) as CreateLocationResponse | LocationError;
 
@@ -118,24 +103,15 @@ export async function deleteLocation(
     throw new Error("API base URL is not configured");
   }
 
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  };
-
-  const authToken = token || (typeof window !== "undefined" ? getToken() : null);
-  if (authToken) {
-    headers.Authorization = `Bearer ${authToken}`;
-  }
-
-  const response = await fetch(`${API_BASE_URL}/locations/${slug}`, {
-    method: "DELETE",
-    headers,
-  });
+  const response = await fetchApi(
+    `${API_BASE_URL}/locations/${slug}`,
+    {
+      method: "DELETE",
+    },
+    token
+  );
 
   if (!response.ok) {
-    if (response.status === 401) {
-      throw new Error("Unauthorized");
-    }
     const errorData = (await response.json()) as LocationError;
     if ("error" in errorData) {
       throw new Error(errorData.error.message || "Failed to delete location");

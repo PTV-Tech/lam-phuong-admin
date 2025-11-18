@@ -1,7 +1,71 @@
 import type { DashboardData } from "@/types/dashboard";
-import { getToken } from "./auth";
+import { getToken, clearAuth } from "./auth";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_LP_API_URL;
+
+/**
+ * Centralized API client that handles 401 responses globally
+ * Clears auth and redirects to sign-in page on unauthorized responses
+ */
+export async function fetchApi(
+  url: string,
+  options: RequestInit = {},
+  token?: string
+): Promise<Response> {
+  // Build headers as a Record to allow property assignment
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  // Merge existing headers if they're a Record
+  if (options.headers) {
+    if (options.headers instanceof Headers) {
+      options.headers.forEach((value, key) => {
+        headers[key] = value;
+      });
+    } else if (Array.isArray(options.headers)) {
+      options.headers.forEach(([key, value]) => {
+        headers[key] = value;
+      });
+    } else {
+      Object.assign(headers, options.headers);
+    }
+  }
+
+  const authToken = token || (typeof window !== "undefined" ? getToken() : null);
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+
+  const response = await fetch(url, {
+    ...options,
+    headers,
+  });
+  // Handle 401 Unauthorized globally
+  if (response.status === 401) {
+    // Check if we're in a browser environment
+    const isBrowser = typeof window !== "undefined" && typeof window.location !== "undefined";
+    
+    if (isBrowser) {
+      // Client-side: Clear auth and redirect immediately
+      clearAuth();
+      // Use replace() to prevent adding to browser history
+      // Add unauthorized=true query param to prevent RouteGuard from redirecting back
+      window.location.replace("/sign-in?unauthorized=true");
+      // Return a promise that never resolves to prevent further execution
+      // The browser will navigate away before this promise can be handled
+      return new Promise<Response>(() => {
+        // This promise never resolves, blocking further execution
+        // The redirect will happen before any error handling can occur
+      });
+    }
+    
+    // Server-side: Throw error so server components can catch and redirect using Next.js redirect()
+    throw new Error("Unauthorized");
+  }
+
+  return response;
+}
 
 const FALLBACK_DASHBOARD: DashboardData = {
   stats: [
@@ -105,31 +169,13 @@ export async function fetchDashboardData(token?: string): Promise<DashboardData>
       return FALLBACK_DASHBOARD;
     }
 
-    const headers: HeadersInit = {
-      "Content-Type": "application/json",
-    };
-
-    // Use provided token (from server) or get from storage (for client-side)
-    const authToken = token || (typeof window !== "undefined" ? getToken() : null);
-    if (authToken) {
-      headers.Authorization = `Bearer ${authToken}`;
-    }
-
-    const response = await fetch(`${API_BASE_URL}/admin/dashboard`, {
-      headers,
-      cache: "no-store", // Don't cache authenticated requests
-    });
-
-    if (response.status === 401) {
-      // Unauthorized - clear auth and redirect (client-side only)
-      if (typeof window !== "undefined") {
-        const { clearAuth } = await import("./auth");
-        clearAuth();
-        window.location.href = "/sign-in";
-      }
-      // On server, return fallback data
-      return FALLBACK_DASHBOARD;
-    }
+    const response = await fetchApi(
+      `${API_BASE_URL}/admin/dashboard`,
+      {
+        cache: "no-store", // Don't cache authenticated requests
+      },
+      token
+    );
 
     if (!response.ok) {
       // For 404 or other errors, return fallback data
@@ -149,6 +195,10 @@ export async function fetchDashboardData(token?: string): Promise<DashboardData>
       lastSyncedAt: payload.lastSyncedAt ?? FALLBACK_DASHBOARD.lastSyncedAt,
     };
   } catch (error) {
+    // If it's an Unauthorized error, rethrow it so the calling page can redirect
+    if (error instanceof Error && error.message === "Unauthorized") {
+      throw error;
+    }
     console.error("fetchDashboardData error", error);
     return FALLBACK_DASHBOARD;
   }

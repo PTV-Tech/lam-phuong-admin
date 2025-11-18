@@ -29,6 +29,10 @@ export default async function UsersPage() {
   try {
     users = await getUsers(token || undefined);
   } catch (error) {
+    // Redirect to sign-in on unauthorized error
+    if (error instanceof Error && error.message === "Unauthorized") {
+      redirect("/sign-in?unauthorized=true");
+    }
     // Only log non-unauthorized errors
     if (error instanceof Error && error.message !== "Unauthorized") {
       console.error("Failed to fetch users:", error);

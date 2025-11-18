@@ -1,4 +1,4 @@
-import { getToken } from "./auth";
+import { fetchApi } from "./api";
 import type { User } from "@/types/auth";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_LP_API_URL;
@@ -37,20 +37,14 @@ export async function getUsers(token?: string): Promise<User[]> {
     return [];
   }
 
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  };
-
-  const authToken = token || (typeof window !== "undefined" ? getToken() : null);
-  if (authToken) {
-    headers.Authorization = `Bearer ${authToken}`;
-  }
-
   try {
-    const response = await fetch(`${API_BASE_URL}/users`, {
-      headers,
-      cache: "no-store",
-    });
+    const response = await fetchApi(
+      `${API_BASE_URL}/users`,
+      {
+        cache: "no-store",
+      },
+      token
+    );
 
     // Handle 404 as empty array (no users exist yet)
     if (response.status === 404) {
@@ -64,9 +58,6 @@ export async function getUsers(token?: string): Promise<User[]> {
     }
 
     if (!response.ok) {
-      if (response.status === 401) {
-        throw new Error("Unauthorized");
-      }
       // Try to parse error response
       try {
         const errorData = (await response.json()) as UsersError;
@@ -88,7 +79,7 @@ export async function getUsers(token?: string): Promise<User[]> {
     // If response format is unexpected but status is OK, return empty array
     return [];
   } catch (error) {
-    // If it's a known error, rethrow it
+    // If it's an Unauthorized error, it's already handled by fetchApi (redirects to sign-in)
     if (error instanceof Error && error.message === "Unauthorized") {
       throw error;
     }
@@ -106,20 +97,14 @@ export async function createUser(
     throw new Error("API base URL is not configured");
   }
 
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  };
-
-  const authToken = token || (typeof window !== "undefined" ? getToken() : null);
-  if (authToken) {
-    headers.Authorization = `Bearer ${authToken}`;
-  }
-
-  const response = await fetch(`${API_BASE_URL}/users`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(user),
-  });
+  const response = await fetchApi(
+    `${API_BASE_URL}/users`,
+    {
+      method: "POST",
+      body: JSON.stringify(user),
+    },
+    token
+  );
 
   const data = (await response.json()) as CreateUserResponse | UsersError;
 

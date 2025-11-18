@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { SummaryCards } from "@/components/dashboard/summary-cards";
 import { RecentOrdersTable } from "@/components/dashboard/recent-orders";
 import { PendingApprovals } from "@/components/dashboard/pending-approvals";
@@ -22,6 +23,7 @@ import {
   Users,
 } from "lucide-react";
 import { fetchDashboardData } from "@/lib/api";
+import { getUserFromCookie } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Tabs,
@@ -41,8 +43,30 @@ const iconMap: Record<string, LucideIcon> = {
 export default async function DashboardPage() {
   const cookieStore = await cookies();
   const token = cookieStore.get("lp_auth_token")?.value;
+  const userCookie = cookieStore.get("lp_auth_user")?.value;
 
-  const dashboard = await fetchDashboardData(token || undefined);
+  // Check authentication - redirect if not authenticated
+  if (!token) {
+    redirect("/sign-in?unauthorized=true");
+  }
+
+  // Verify user exists
+  const user = getUserFromCookie(userCookie);
+  if (!user) {
+    redirect("/sign-in?unauthorized=true");
+  }
+
+  let dashboard;
+  try {
+    dashboard = await fetchDashboardData(token || undefined);
+  } catch (error) {
+    // Redirect to sign-in on unauthorized error
+    if (error instanceof Error && error.message === "Unauthorized") {
+      redirect("/sign-in?unauthorized=true");
+    }
+    // For other errors, throw to show error page or use fallback
+    throw error;
+  }
 
   const cards = dashboard.stats.map((stat) => ({
     ...stat,
