@@ -5,38 +5,52 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { isAuthenticated as checkAuth, getToken } from "@/lib/auth";
 
+const PUBLIC_PAGES = ["/sign-in", "/verify-email"];
+
 export function RouteGuard({ children }: { children: React.ReactNode }) {
   const { isAuthenticated: authContextAuth, isLoading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [isChecking, setIsChecking] = useState(true);
+  const isPublicPage = PUBLIC_PAGES.includes(pathname);
+  const [isChecking, setIsChecking] = useState(!isPublicPage);
 
   useEffect(() => {
+    // Skip check for public pages
+    if (isPublicPage) {
+      // For sign-in page, if authenticated, redirect to dashboard
+      if (pathname === "/sign-in" && !isLoading) {
+        const hasAuth = checkAuth();
+        const token = getToken();
+        if (hasAuth || token) {
+          const redirect = searchParams.get("redirect") || "/";
+          router.replace(redirect);
+        }
+      }
+      // Use setTimeout to defer state update for public pages
+      const timer = setTimeout(() => {
+        setIsChecking(false);
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+
     // Check authentication from both localStorage and cookies
     const hasAuth = checkAuth();
     const token = getToken();
-    
-    // Skip check for sign-in page
-    if (pathname === "/sign-in") {
-      // If authenticated (via localStorage or cookie), redirect to dashboard
-      if (!isLoading && (hasAuth || token)) {
-        const redirect = searchParams.get("redirect") || "/";
-        router.replace(redirect);
-      }
-      setIsChecking(false);
-      return;
-    }
 
     // Protect all other routes
-    if (!isLoading && !hasAuth && !token) {
-      router.replace(`/sign-in?redirect=${encodeURIComponent(pathname)}`);
-      setIsChecking(false);
-      return;
+    if (!isLoading) {
+      if (!hasAuth && !token) {
+        router.replace(`/sign-in?redirect=${encodeURIComponent(pathname)}`);
+      } else {
+        // Use setTimeout to defer state update
+        const timer = setTimeout(() => {
+          setIsChecking(false);
+        }, 0);
+        return () => clearTimeout(timer);
+      }
     }
-
-    setIsChecking(false);
-  }, [authContextAuth, isLoading, pathname, router, searchParams]);
+  }, [authContextAuth, isLoading, pathname, router, searchParams, isPublicPage]);
 
   // Show loading state while checking authentication
   if (isLoading || isChecking) {
@@ -47,8 +61,8 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Don't render protected content if not authenticated
-  if (pathname !== "/sign-in" && !checkAuth()) {
+  // Don't render protected content if not authenticated (except public pages)
+  if (!isPublicPage && !checkAuth()) {
     return null;
   }
 
