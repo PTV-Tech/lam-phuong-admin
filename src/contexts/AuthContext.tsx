@@ -78,9 +78,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const loginWithAirtable = () => {
+  const loginWithAirtable = async () => {
     try {
-      const authUrl = getAirtableAuthUrl()
+      const authUrl = await getAirtableAuthUrl()
       window.location.href = authUrl
     } catch (error) {
       console.error('Failed to initiate Airtable OAuth:', error)

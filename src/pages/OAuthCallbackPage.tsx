@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
-import { verifyState } from '@/lib/airtable-oauth'
+import { verifyState, clearOAuthState } from '@/lib/airtable-oauth'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+
+// ✅ Global cache để track codes đã xử lý
+const processedCodes = new Set<string>()
 
 export function OAuthCallbackPage() {
   const [searchParams] = useSearchParams()
@@ -10,44 +13,81 @@ export function OAuthCallbackPage() {
   const { handleAirtableCallback } = useAuth()
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const hasStarted = useRef(false)
 
   useEffect(() => {
+    // ✅ Chặn nếu đã bắt đầu xử lý trong instance này
+    if (hasStarted.current) {
+      console.log('🛑 Already started in this instance')
+      return
+    }
+
     const processCallback = async () => {
       try {
         const code = searchParams.get('code')
         const state = searchParams.get('state')
         const errorParam = searchParams.get('error')
 
-        // Check for OAuth error
+        console.log('🔍 Callback received:', { 
+          code: code?.substring(0, 10) + '...', 
+          state: state?.substring(0, 10) + '...' 
+        })
+
         if (errorParam) {
           setError(`OAuth error: ${errorParam}`)
           setLoading(false)
+          clearOAuthState()
           return
         }
 
-        // Validate required parameters
         if (!code || !state) {
           setError('Missing authorization code or state parameter')
           setLoading(false)
+          clearOAuthState()
           return
         }
 
-        // Verify state parameter
+        // ✅ Check if this code was already processed GLOBALLY
+        if (processedCodes.has(code)) {
+          console.log('🛑 Code already processed globally, skipping...')
+          // Chờ 1 giây rồi redirect (trường hợp lần 1 đang xử lý)
+          setTimeout(() => {
+            navigate('/dashboard', { replace: true })
+          }, 1000)
+          return
+        }
+
+        // ✅ Mark code as being processed IMMEDIATELY
+        console.log('✅ Marking code as processing')
+        processedCodes.add(code)
+        hasStarted.current = true
+
+        // Verify state
         if (!verifyState(state)) {
           setError('Invalid state parameter. Possible CSRF attack.')
           setLoading(false)
+          clearOAuthState()
+          processedCodes.delete(code) // Remove from cache on error
           return
         }
 
-        // Exchange code for tokens and complete authentication
+        console.log('🔄 Exchanging code for token...')
         await handleAirtableCallback(code, state)
         
-        // Redirect to dashboard on success
+        console.log('✅ Success! Cleaning up and redirecting...')
+        clearOAuthState()
         navigate('/dashboard', { replace: true })
       } catch (err) {
-        console.error('OAuth callback error:', err)
+        console.error('❌ OAuth callback error:', err)
         setError(err instanceof Error ? err.message : 'Failed to complete authentication')
         setLoading(false)
+        clearOAuthState()
+        
+        // Remove code from cache on error so user can retry
+        const code = searchParams.get('code')
+        if (code) {
+          processedCodes.delete(code)
+        }
       }
     }
 
@@ -90,7 +130,12 @@ export function OAuthCallbackPage() {
           </CardHeader>
           <CardContent>
             <button
-              onClick={() => navigate('/login')}
+              onClick={() => {
+                // ✅ Clear cache khi user retry
+                const code = searchParams.get('code')
+                if (code) processedCodes.delete(code)
+                navigate('/login')
+              }}
               className="w-full mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
             >
               Return to Login
@@ -103,4 +148,3 @@ export function OAuthCallbackPage() {
 
   return null
 }
-

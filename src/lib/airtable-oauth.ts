@@ -1,5 +1,5 @@
 /**
- * Airtable OAuth 2.0 implementation
+ * Airtable OAuth 2.0 implementation with PKCE
  * Reference: https://airtable.com/developers/web/api/oauth-reference
  */
 
@@ -36,10 +36,48 @@ function getAirtableConfig() {
 }
 
 /**
+ * Generate PKCE code verifier (random string)
+ */
+function generateCodeVerifier(): string {
+  const array = new Uint8Array(32)
+  crypto.getRandomValues(array)
+  return base64URLEncode(array)
+}
+
+/**
+ * Base64 URL encode (without padding)
+ */
+function base64URLEncode(buffer: Uint8Array): string {
+  const bytes = Array.from(buffer)
+  const binary = String.fromCharCode(...bytes)
+  return btoa(binary)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '')
+}
+
+/**
+ * Generate PKCE code challenge from verifier
+ */
+async function generateCodeChallenge(verifier: string): Promise<string> {
+  const encoder = new TextEncoder()
+  const data = encoder.encode(verifier)
+  const hash = await crypto.subtle.digest('SHA-256', data)
+  return base64URLEncode(new Uint8Array(hash))
+}
+
+/**
  * Generate the authorization URL for Airtable OAuth
  */
-export function getAirtableAuthUrl(): string {
+export async function getAirtableAuthUrl(): Promise<string> {
   const { clientId, redirectUri } = getAirtableConfig()
+  
+  // Generate PKCE parameters
+  const codeVerifier = generateCodeVerifier()
+  const codeChallenge = await generateCodeChallenge(codeVerifier)
+  
+  // Store code verifier for later use in token exchange
+  sessionStorage.setItem('airtable_code_verifier', codeVerifier)
   
   const params = new URLSearchParams({
     client_id: clientId,
@@ -47,6 +85,8 @@ export function getAirtableAuthUrl(): string {
     response_type: 'code',
     scope: 'schema.bases:read schema.bases:write data.records:read data.records:write',
     state: generateState(),
+    code_challenge: codeChallenge,
+    code_challenge_method: 'S256',
   })
 
   return `${AIRTABLE_OAUTH_BASE_URL}/authorize?${params.toString()}`
@@ -66,28 +106,65 @@ function generateState(): string {
  */
 export function verifyState(state: string): boolean {
   const storedState = sessionStorage.getItem('airtable_oauth_state')
-  sessionStorage.removeItem('airtable_oauth_state')
   return storedState === state
 }
+
+/**
+ * Clear the stored OAuth state after successful verification
+ */
+export function clearOAuthState(): void {
+  sessionStorage.removeItem('airtable_oauth_state')
+  sessionStorage.removeItem('airtable_code_verifier')
+}
+
+/**
+ * Get token exchange endpoint based on environment
+ */
+function getTokenEndpoint(): string {
+  // Development: Dùng Vite proxy
+  if (import.meta.env.DEV) {
+    return '/api/airtable/oauth2/v1/token'
+  }
+  
+  // Production: Dùng serverless function hoặc backend API
+  // Bạn cần deploy một trong các options bên dưới
+  return AIRTABLE_OAUTH_BASE_URL || '/api/airtable-token'
+}
+
 
 /**
  * Exchange authorization code for access token
  */
 export async function exchangeCodeForToken(code: string): Promise<AirtableTokenResponse> {
   const { clientId, clientSecret, redirectUri } = getAirtableConfig()
+  
+  // Get the stored code verifier
+  const codeVerifier = sessionStorage.getItem('airtable_code_verifier')
+  if (!codeVerifier) {
+    throw new Error('Code verifier not found. Please restart the OAuth flow.')
+  }
+  
+  const body: Record<string, string> = {
+    grant_type: 'authorization_code',
+    code,
+    redirect_uri: redirectUri,
+    client_id: clientId,
+    code_verifier: codeVerifier,
+  }
+  
+  // Only add client_secret if it exists (optional for PKCE)
+  if (clientSecret) {
+    body.client_secret = clientSecret
+  }
 
-  const response = await fetch(`${AIRTABLE_OAUTH_BASE_URL}/token`, {
+  const endpoint = getTokenEndpoint();
+
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
     },
-    body: new URLSearchParams({
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: redirectUri,
-      client_id: clientId,
-      ...(clientSecret && { client_secret: clientSecret }),
-    }),
+    body: new URLSearchParams(body),
   })
 
   if (!response.ok) {
@@ -104,17 +181,24 @@ export async function exchangeCodeForToken(code: string): Promise<AirtableTokenR
 export async function refreshAccessToken(refreshToken: string): Promise<AirtableTokenResponse> {
   const { clientId, clientSecret } = getAirtableConfig()
 
-  const response = await fetch(`${AIRTABLE_OAUTH_BASE_URL}/token`, {
+  const body: Record<string, string> = {
+    grant_type: 'refresh_token',
+    refresh_token: refreshToken,
+    client_id: clientId,
+  }
+  
+  if (clientSecret) {
+    body.client_secret = clientSecret
+  }
+
+  const endpoint = getTokenEndpoint();
+
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
     },
-    body: new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken,
-      client_id: clientId,
-      ...(clientSecret && { client_secret: clientSecret }),
-    }),
+    body: new URLSearchParams(body),
   })
 
   if (!response.ok) {
@@ -219,4 +303,3 @@ export async function getValidAccessToken(): Promise<string | null> {
 export function clearAirtableTokens(): void {
   localStorage.removeItem('airtable_tokens')
 }
-
