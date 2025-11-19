@@ -1,9 +1,8 @@
 import { useState, type FormEvent } from "react";
-import slugify from "slugify";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { type ProductGroupFields } from "@/lib/airtable-api";
+import { type ProductGroupFields, generateUniqueProductGroupSlug } from "@/lib/airtable-api";
 
 interface ProductGroupFormDialogProps {
   open: boolean;
@@ -20,6 +19,7 @@ export function ProductGroupFormDialog({
     Name: "",
   });
   const [loading, setLoading] = useState(false);
+  const [generatingSlug, setGeneratingSlug] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (!open) return null;
@@ -35,16 +35,26 @@ export function ProductGroupFormDialog({
         throw new Error("Name is required");
       }
 
-      // Generate slug from name
-      const slug = slugify(formData.Name.trim(), {
-        lower: true,
-        strict: true,
-      });
+      // Generate unique slug from name
+      setGeneratingSlug(true);
+      let uniqueSlug: string;
+      try {
+        uniqueSlug = await generateUniqueProductGroupSlug(formData.Name.trim());
+      } catch (slugError) {
+        throw new Error(
+          slugError instanceof Error 
+            ? `Failed to generate unique slug: ${slugError.message}`
+            : "Failed to generate unique slug"
+        );
+      } finally {
+        setGeneratingSlug(false);
+      }
 
-      // Submit with name and auto-generated slug
+      // Submit with name, unique slug, and default Active status
       await onSubmit({
         ...formData,
-        Slug: slug,
+        Slug: uniqueSlug,
+        Status: "Active",
       });
       // Reset form
       setFormData({
@@ -129,7 +139,7 @@ export function ProductGroupFormDialog({
                 onChange={(e) => handleChange(e.target.value)}
                 placeholder="Enter product group name"
                 required
-                disabled={loading}
+                disabled={loading || generatingSlug}
                 autoFocus
                 className="h-10 bg-background border-input focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 transition-all mt-3"
               />
@@ -168,7 +178,7 @@ export function ProductGroupFormDialog({
               type="button"
               variant="ghost"
               onClick={onClose}
-              disabled={loading}
+              disabled={loading || generatingSlug}
               className="px-5 h-9 font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
             >
               Cancel
@@ -176,10 +186,15 @@ export function ProductGroupFormDialog({
             <Button
               type="submit"
               variant="secondary"
-              disabled={loading || !formData.Name?.trim()}
+              disabled={loading || generatingSlug || !formData.Name?.trim()}
               className="px-5 h-9 font-semibold bg-secondary text-secondary-foreground hover:bg-secondary/80 shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-md"
             >
-              {loading ? (
+              {generatingSlug ? (
+                <span className="flex items-center gap-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-current border-t-transparent"></div>
+                  <span>Generating slug...</span>
+                </span>
+              ) : loading ? (
                 <span className="flex items-center gap-2">
                   <div className="animate-spin rounded-full h-4 w-4 border-2 border-current border-t-transparent"></div>
                   <span>Creating...</span>

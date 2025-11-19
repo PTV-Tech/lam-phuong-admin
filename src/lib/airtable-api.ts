@@ -65,6 +65,7 @@ export interface LocationFields {
 export interface ProductGroupFields {
   Name?: string
   Slug?: string
+  Status?: string
   [key: string]: any
 }
 
@@ -440,5 +441,93 @@ export async function deleteProductGroups(recordIds: string[]): Promise<void> {
       throw new Error(`Failed to delete product groups: ${error}`)
     }
   }
+}
+
+/**
+ * Update a product group in Airtable
+ */
+export async function updateProductGroup(recordId: string, fields: Partial<ProductGroupFields>): Promise<AirtableRecord<ProductGroupFields>> {
+  const accessToken = await getValidAccessToken()
+  if (!accessToken) {
+    throw new Error('No valid access token. Please log in again.')
+  }
+
+  const baseId = getAirtableBaseId()
+  const tableName = getProductGroupsTableName()
+  const url = `${AIRTABLE_API_BASE_URL}/${baseId}/${encodeURIComponent(tableName)}/${recordId}`
+
+  const response = await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      fields: fields,
+    }),
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Failed to update product group: ${error}`)
+  }
+
+  const data = await response.json()
+  return data
+}
+
+/**
+ * Check if a slug exists in Product Groups Airtable table
+ */
+export async function checkProductGroupSlugExists(slug: string): Promise<boolean> {
+  try {
+    const tableName = getProductGroupsTableName()
+    // Escape single quotes in slug for Airtable formula
+    const escapedSlug = slug.replace(/'/g, "''")
+    const filterFormula = `{Slug} = '${escapedSlug}'`
+    
+    const response = await getProductGroups({
+      filterByFormula: filterFormula,
+      maxRecords: 1,
+    })
+    
+    return response.records.length > 0
+  } catch (err) {
+    console.error('Error checking product group slug existence:', err)
+    // If there's an error checking, assume it doesn't exist to allow creation
+    return false
+  }
+}
+
+/**
+ * Generate a unique slug for product groups by checking Airtable and appending suffix if needed
+ */
+export async function generateUniqueProductGroupSlug(name: string): Promise<string> {
+  const baseSlug = slugify(name.trim(), {
+    lower: true,
+    strict: true,
+  })
+
+  // Check if base slug exists
+  const baseExists = await checkProductGroupSlugExists(baseSlug)
+  if (!baseExists) {
+    return baseSlug
+  }
+
+  // Try with suffix starting from 2
+  let counter = 2
+  let uniqueSlug = `${baseSlug}-${counter}`
+  
+  while (await checkProductGroupSlugExists(uniqueSlug)) {
+    counter++
+    uniqueSlug = `${baseSlug}-${counter}`
+    
+    // Safety limit to prevent infinite loops
+    if (counter > 1000) {
+      throw new Error('Unable to generate unique slug after many attempts')
+    }
+  }
+
+  return uniqueSlug
 }
 
