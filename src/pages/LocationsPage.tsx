@@ -3,7 +3,7 @@ import { AppLayout } from '@/components/AppLayout'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { LocationFormDialog } from '@/components/LocationFormDialog'
-import { getLocations, createLocation, deleteLocation, deleteLocations, type LocationFields, type AirtableRecord } from '@/lib/airtable-api'
+import { getLocations, createLocation, updateLocation, deleteLocation, deleteLocations, type LocationFields, type AirtableRecord } from '@/lib/airtable-api'
 
 export function LocationsPage() {
   const [locations, setLocations] = useState<AirtableRecord<LocationFields>[]>([])
@@ -13,6 +13,7 @@ export function LocationsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; ids: string[] }>({ open: false, ids: [] })
   const [deleting, setDeleting] = useState(false)
+  const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     loadLocations()
@@ -90,6 +91,33 @@ export function LocationsPage() {
 
   const handleDeleteCancel = () => {
     setDeleteConfirm({ open: false, ids: [] })
+  }
+
+  const handleToggleActive = async (locationId: string, currentStatus: string) => {
+    try {
+      setTogglingIds(prev => new Set(prev).add(locationId))
+      setError(null)
+      
+      const newStatus = currentStatus === "Active" ? "Disabled" : "Active"
+      await updateLocation(locationId, { Status: newStatus })
+      
+      // Update local state optimistically
+      setLocations(prev => prev.map(loc => 
+        loc.id === locationId 
+          ? { ...loc, fields: { ...loc.fields, Status: newStatus } }
+          : loc
+      ))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update location status')
+      // Reload to sync with server
+      await loadLocations()
+    } finally {
+      setTogglingIds(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(locationId)
+        return newSet
+      })
+    }
   }
 
   return (
@@ -347,34 +375,38 @@ export function LocationsPage() {
                     </div>
                   </CardHeader>
                 <CardContent className="pt-0">
-                  {location.fields.Address && (
-                    <div className="flex items-start gap-2 mb-2">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="text-muted-foreground mt-0.5 flex-shrink-0"
+                  <div className="flex items-center justify-between mb-3 pt-3 border-t border-border">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-muted-foreground font-medium">Status:</span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleToggleActive(location.id, location.fields.Status ?? "Active")
+                        }}
+                        disabled={togglingIds.has(location.id)}
+                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 ${
+                          location.fields.Status === "Active"
+                            ? 'bg-[#10b981] focus:ring-[#10b981]'
+                            : 'bg-[#e5e7eb] focus:ring-gray-400'
+                        }`}
                       >
-                        <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
-                        <circle cx="12" cy="10" r="3" />
-                      </svg>
-                      <span className="text-sm text-muted-foreground line-clamp-2">{location.fields.Address}</span>
+                        <span
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition-transform duration-200 ease-in-out ${
+                            location.fields.Status === "Active" ? 'translate-x-6' : 'translate-x-0.5'
+                          }`}
+                        />
+                      </button>
+                      <span className={`text-xs font-medium ${
+                        location.fields.Status === "Active"
+                          ? 'text-[#10b981]'
+                          : 'text-muted-foreground'
+                      }`}>
+                        {location.fields.Status === "Active" ? 'Active' : 'Disabled'}
+                      </span>
                     </div>
-                  )}
-                  {(location.fields.City || location.fields.Country) && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-                      {location.fields.City && <span>{location.fields.City}</span>}
-                      {location.fields.City && location.fields.Country && <span>•</span>}
-                      {location.fields.Country && <span>{location.fields.Country}</span>}
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2 pt-3 border-t border-border">
+                  </div>
+                  <div className="flex items-center gap-2">
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
                       width="12"

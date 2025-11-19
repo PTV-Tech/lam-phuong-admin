@@ -41,10 +41,11 @@ export function LocationFormDialog({
         strict: true,
       });
 
-      // Submit with name and auto-generated slug
+      // Submit with name, auto-generated slug, and default Active status
       await onSubmit({
         ...formData,
         Slug: slug,
+        Status: "Active",
       });
       // Reset form
       setFormData({

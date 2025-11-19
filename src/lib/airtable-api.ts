@@ -53,11 +53,7 @@ export interface AirtableResponse<T = Record<string, any>> {
  */
 export interface LocationFields {
   Name?: string
-  Address?: string
-  City?: string
-  Country?: string
-  Latitude?: number
-  Longitude?: number
+  Status?: string
   [key: string]: any
 }
 
@@ -168,6 +164,39 @@ export async function createLocation(fields: LocationFields): Promise<AirtableRe
 
   const data = await response.json()
   return data.records[0]
+}
+
+/**
+ * Update a location in Airtable
+ */
+export async function updateLocation(recordId: string, fields: Partial<LocationFields>): Promise<AirtableRecord<LocationFields>> {
+  const accessToken = await getValidAccessToken()
+  if (!accessToken) {
+    throw new Error('No valid access token. Please log in again.')
+  }
+
+  const baseId = getAirtableBaseId()
+  const tableName = getLocationsTableName()
+  const url = `${AIRTABLE_API_BASE_URL}/${baseId}/${encodeURIComponent(tableName)}/${recordId}`
+
+  const response = await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      fields: fields,
+    }),
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Failed to update location: ${error}`)
+  }
+
+  const data = await response.json()
+  return data
 }
 
 /**
