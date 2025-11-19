@@ -213,6 +213,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<Airtable
  * Get user information from Airtable API
  */
 export async function getAirtableUserInfo(accessToken: string): Promise<AirtableUserInfo> {
+  console.log('[getAirtableUserInfo] Calling whoami API endpoint...')
   const response = await fetch(`${AIRTABLE_API_BASE_URL}/meta/whoami`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -221,10 +222,12 @@ export async function getAirtableUserInfo(accessToken: string): Promise<Airtable
 
   if (!response.ok) {
     const error = await response.text()
+    console.error('[getAirtableUserInfo] API call failed:', error)
     throw new Error(`Failed to get user info: ${error}`)
   }
 
   const data = await response.json()
+  console.log('[getAirtableUserInfo] API call successful')
   return {
     id: data.id,
     email: data.email,

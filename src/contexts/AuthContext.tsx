@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from 'react'
 import {
   getAirtableAuthUrl,
   exchangeCodeForToken,
@@ -34,30 +34,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return storedUser ? JSON.parse(storedUser) : null
   })
 
+  // Ref to prevent duplicate calls during StrictMode double render
+  const checkingAuthRef = useRef(false)
+  const hasCheckedRef = useRef(false)
+
   // Check for valid Airtable token on mount
   useEffect(() => {
+    // Prevent duplicate calls
+    if (checkingAuthRef.current || hasCheckedRef.current) {
+      console.log('[AuthContext] Already checking auth or already checked, skipping duplicate call')
+      return
+    }
+
     const checkAirtableAuth = async () => {
+      checkingAuthRef.current = true
+      console.log('[AuthContext] Checking Airtable authentication...')
+
       const tokens = getStoredAirtableTokens()
       if (tokens) {
         try {
           const accessToken = await getValidAccessToken()
           if (accessToken) {
+            console.log('[AuthContext] Valid access token found, fetching user info...')
             const userInfo = await getAirtableUserInfo(accessToken)
+            console.log('[AuthContext] User info fetched successfully:', userInfo.email)
             setUser(userInfo)
             setIsAuthenticated(true)
           } else {
             // Token expired and refresh failed
+            console.log('[AuthContext] Token expired and refresh failed')
             clearAirtableTokens()
             setIsAuthenticated(false)
             setUser(null)
           }
         } catch (error) {
-          console.error('Failed to verify Airtable authentication:', error)
+          console.error('[AuthContext] Failed to verify Airtable authentication:', error)
           clearAirtableTokens()
           setIsAuthenticated(false)
           setUser(null)
         }
+      } else {
+        console.log('[AuthContext] No Airtable tokens found')
       }
+
+      checkingAuthRef.current = false
+      hasCheckedRef.current = true
     }
 
     checkAirtableAuth()

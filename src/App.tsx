@@ -7,6 +7,8 @@ import { LocationsPage } from '@/pages/LocationsPage'
 import { ProductGroupsPage } from '@/pages/ProductGroupsPage'
 import { JobCategoriesPage } from '@/pages/JobCategoriesPage'
 import { JobTypesPage } from '@/pages/JobTypesPage'
+import { JobPostingsPage } from '@/pages/JobPostingsPage'
+import { JobPostingFormPage } from '@/pages/JobPostingFormPage'
 import { OAuthCallbackPage } from '@/pages/OAuthCallbackPage'
 
 function App() {
@@ -53,6 +55,30 @@ function App() {
             element={
               <ProtectedRoute>
                 <JobTypesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/job-postings"
+            element={
+              <ProtectedRoute>
+                <JobPostingsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/job-postings/new"
+            element={
+              <ProtectedRoute>
+                <JobPostingFormPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/job-postings/:id/edit"
+            element={
+              <ProtectedRoute>
+                <JobPostingFormPage />
               </ProtectedRoute>
             }
           />
