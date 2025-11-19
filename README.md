@@ -1,3 +1,66 @@
+# Lam Phuong Admin
+
+A React + TypeScript + Vite admin dashboard with Airtable OAuth authentication.
+
+## Features
+
+- 🔐 Airtable OAuth 2.0 authentication
+- 📧 Traditional email/password login
+- 🎨 Dark/Light theme support
+- 🛡️ Protected routes
+- ⚡ Fast development with Vite
+
+## Airtable OAuth Setup
+
+To enable Airtable sign-in, you need to:
+
+1. **Create an OAuth App in Airtable**:
+   - Go to [Airtable Developer Hub](https://airtable.com/create/oauth)
+   - Create a new OAuth integration
+   - Set the redirect URI to: `http://localhost:5173/oauth/callback` (for development)
+   - Copy your Client ID and Client Secret
+
+2. **Configure Environment Variables**:
+   Create a `.env` file in the root directory:
+   ```env
+   VITE_AIRTABLE_CLIENT_ID=your_client_id_here
+   VITE_AIRTABLE_CLIENT_SECRET=your_client_secret_here
+   VITE_AIRTABLE_REDIRECT_URI=http://localhost:5173/oauth/callback
+   ```
+
+3. **Update Redirect URI for Production**:
+   When deploying, update `VITE_AIRTABLE_REDIRECT_URI` to match your production URL and ensure it's added to your Airtable OAuth app settings.
+
+## Getting Started
+
+```bash
+# Install dependencies
+pnpm install
+
+# Start development server
+pnpm dev
+
+# Build for production
+pnpm build
+```
+
+## OAuth Flow
+
+The application implements the OAuth 2.0 authorization code flow:
+1. User clicks "Sign in with Airtable"
+2. Redirects to Airtable authorization page
+3. User grants permissions
+4. Airtable redirects back with authorization code
+5. Application exchanges code for access/refresh tokens
+6. User information is fetched and stored
+7. User is redirected to dashboard
+
+## Reference
+
+- [Airtable OAuth Reference](https://airtable.com/developers/web/api/oauth-reference)
+
+---
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.

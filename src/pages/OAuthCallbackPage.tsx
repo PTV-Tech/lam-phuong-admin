@@ -1,0 +1,106 @@
+import { useEffect, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useAuth } from '@/contexts/AuthContext'
+import { verifyState } from '@/lib/airtable-oauth'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+
+export function OAuthCallbackPage() {
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const { handleAirtableCallback } = useAuth()
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const processCallback = async () => {
+      try {
+        const code = searchParams.get('code')
+        const state = searchParams.get('state')
+        const errorParam = searchParams.get('error')
+
+        // Check for OAuth error
+        if (errorParam) {
+          setError(`OAuth error: ${errorParam}`)
+          setLoading(false)
+          return
+        }
+
+        // Validate required parameters
+        if (!code || !state) {
+          setError('Missing authorization code or state parameter')
+          setLoading(false)
+          return
+        }
+
+        // Verify state parameter
+        if (!verifyState(state)) {
+          setError('Invalid state parameter. Possible CSRF attack.')
+          setLoading(false)
+          return
+        }
+
+        // Exchange code for tokens and complete authentication
+        await handleAirtableCallback(code, state)
+        
+        // Redirect to dashboard on success
+        navigate('/dashboard', { replace: true })
+      } catch (err) {
+        console.error('OAuth callback error:', err)
+        setError(err instanceof Error ? err.message : 'Failed to complete authentication')
+        setLoading(false)
+      }
+    }
+
+    processCallback()
+  }, [searchParams, handleAirtableCallback, navigate])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-2xl font-bold text-center">
+              Completing Sign In...
+            </CardTitle>
+            <CardDescription className="text-center">
+              Please wait while we complete your Airtable authentication
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-2xl font-bold text-center text-destructive">
+              Authentication Failed
+            </CardTitle>
+            <CardDescription className="text-center">
+              {error}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <button
+              onClick={() => navigate('/login')}
+              className="w-full mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+            >
+              Return to Login
+            </button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  return null
+}
+

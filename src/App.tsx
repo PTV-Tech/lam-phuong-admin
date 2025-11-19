@@ -4,6 +4,7 @@ import { ThemeProvider } from '@/components/theme/theme-provider'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { LoginPage } from '@/pages/LoginPage'
 import { DashboardPage } from '@/pages/DashboardPage'
+import { OAuthCallbackPage } from '@/pages/OAuthCallbackPage'
 
 function App() {
   return (
@@ -12,6 +13,7 @@ function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
             <Route
               path="/dashboard"
               element={

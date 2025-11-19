@@ -12,7 +12,8 @@ export function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const { login, isAuthenticated } = useAuth()
+  const [airtableLoading, setAirtableLoading] = useState(false)
+  const { login, loginWithAirtable, isAuthenticated } = useAuth()
   const navigate = useNavigate()
 
   // Redirect if already authenticated
@@ -34,6 +35,17 @@ export function LoginPage() {
       setError(err instanceof Error ? err.message : 'Login failed')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleAirtableLogin = () => {
+    try {
+      setAirtableLoading(true)
+      setError('')
+      loginWithAirtable()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to initiate Airtable sign-in')
+      setAirtableLoading(false)
     }
   }
 
@@ -60,7 +72,7 @@ export function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                disabled={loading}
+                disabled={loading || airtableLoading}
               />
             </div>
             <div className="space-y-2">
@@ -72,7 +84,7 @@ export function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                disabled={loading}
+                disabled={loading || airtableLoading}
               />
             </div>
             {error && (
@@ -80,10 +92,68 @@ export function LoginPage() {
                 {error}
               </div>
             )}
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full" disabled={loading || airtableLoading}>
               {loading ? 'Logging in...' : 'Login'}
             </Button>
           </form>
+
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">
+                Or continue with
+              </span>
+            </div>
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={handleAirtableLogin}
+            disabled={loading || airtableLoading}
+          >
+            {airtableLoading ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                Redirecting...
+              </>
+            ) : (
+              <>
+                <svg
+                  className="mr-2 h-4 w-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M12 2L2 7L12 12L22 7L12 2Z"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M2 17L12 22L22 17"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M2 12L12 17L22 12"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                Sign in with Airtable
+              </>
+            )}
+          </Button>
         </CardContent>
       </Card>
     </div>
