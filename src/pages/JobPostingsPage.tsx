@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -126,9 +126,37 @@ export function JobPostingsPage() {
     ids: string[];
     title?: string;
   }>({ open: false, ids: [] });
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
 
   // Ref to prevent duplicate calls during StrictMode double render
   const fetchingRef = useRef(false);
+
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Optimized filtering with useMemo
+  const filteredJobPostings = useMemo(() => {
+    return jobPostings.filter((posting) => {
+      const title = posting.fields["Tiêu đề"] || "";
+      return (
+        debouncedSearchQuery === "" ||
+        title.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
+      );
+    });
+  }, [jobPostings, debouncedSearchQuery]);
+
+  // Clear search function
+  const handleClearSearch = useCallback(() => {
+    setSearchQuery("");
+    setDebouncedSearchQuery("");
+  }, []);
 
   const loadJobPostings = useCallback(async () => {
     // Prevent duplicate calls
@@ -191,7 +219,7 @@ export function JobPostingsPage() {
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedIds(new Set(jobPostings.map((p) => p.id)));
+      setSelectedIds(new Set(filteredJobPostings.map((p) => p.id)));
     } else {
       setSelectedIds(new Set());
     }
@@ -239,8 +267,13 @@ export function JobPostingsPage() {
     setDeleteConfirm({ open: false, ids: [] });
   };
 
-  const allSelected = jobPostings.length > 0 && selectedIds.size === jobPostings.length;
-  const someSelected = selectedIds.size > 0 && selectedIds.size < jobPostings.length;
+  const allSelected =
+    filteredJobPostings.length > 0 &&
+    filteredJobPostings.every((p) => selectedIds.has(p.id));
+  const someSelected =
+    selectedIds.size > 0 &&
+    filteredJobPostings.some((p) => selectedIds.has(p.id)) &&
+    !allSelected;
 
   return (
     <AppLayout>
@@ -398,7 +431,7 @@ export function JobPostingsPage() {
               </CardContent>
             </Card>
           ) : jobPostings.length === 0 ? (
-            // Empty State
+            // Empty State (no job postings at all)
             <Card className="max-w-md mx-auto border-dashed">
               <CardHeader className="text-center py-12">
                 <div className="mx-auto mb-4 p-4 rounded-full bg-muted w-fit">
@@ -450,31 +483,137 @@ export function JobPostingsPage() {
             </Card>
           ) : (
             <>
-              {/* Select All Section */}
-              {jobPostings.length > 0 && (
-                <div className="mb-6 bg-[#f9fafb] rounded-lg px-4 py-3 border border-[#e5e7eb]">
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={allSelected}
-                      ref={(input) => {
-                        if (input) input.indeterminate = someSelected;
-                      }}
-                      onChange={(e) => handleSelectAll(e.target.checked)}
-                      className="w-5 h-5 rounded-md flex-shrink-0 transition-all duration-200 cursor-pointer focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                    />
-                    <span className="text-sm font-medium text-foreground">
-                      {selectedIds.size > 0
-                        ? `${selectedIds.size} job posting${selectedIds.size !== 1 ? "s" : ""} selected`
-                        : "Select all"}
-                    </span>
-                  </div>
+              {/* Search Input */}
+              <div className="mb-6">
+                <div className="relative max-w-md">
+                  <label htmlFor="search-job-postings" className="sr-only">
+                    Search job postings
+                  </label>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground pointer-events-none"
+                  >
+                    <circle cx="11" cy="11" r="8" />
+                    <path d="m21 21-4.35-4.35" />
+                  </svg>
+                  <input
+                    id="search-job-postings"
+                    type="text"
+                    placeholder="Search job postings... / Tìm kiếm bài tuyển dụng..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-10 py-2 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm h-10"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={handleClearSearch}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label="Clear search"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="15" y1="9" x2="9" y2="15" />
+                        <line x1="9" y1="9" x2="15" y2="15" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Result Count */}
+              {debouncedSearchQuery && (
+                <div className="mb-4 text-sm text-muted-foreground">
+                  Showing {filteredJobPostings.length} of {jobPostings.length}{" "}
+                  job posting{jobPostings.length !== 1 ? "s" : ""}
                 </div>
               )}
 
-              {/* Job Postings Grid */}
-              <div className="grid gap-6 sm:gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {jobPostings.map((posting) => {
+              {/* Empty State for Search Results */}
+              {filteredJobPostings.length === 0 ? (
+                <Card className="max-w-md mx-auto border-dashed">
+                  <CardHeader className="text-center py-12">
+                    <div className="mx-auto mb-4 p-4 rounded-full bg-muted w-fit">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="32"
+                        height="32"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="text-muted-foreground"
+                      >
+                        <circle cx="11" cy="11" r="8" />
+                        <path d="m21 21-4.35-4.35" />
+                        <line x1="8.5" y1="8.5" x2="15.5" y2="15.5" />
+                      </svg>
+                    </div>
+                    <CardTitle>
+                      No job postings found for '{debouncedSearchQuery}'
+                    </CardTitle>
+                    <CardDescription className="mt-2">
+                      Try adjusting your search
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Button
+                      onClick={handleClearSearch}
+                      className="w-full"
+                      size="lg"
+                      variant="outline"
+                    >
+                      Clear Search
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : (
+                <>
+                  {/* Select All Section */}
+                  {filteredJobPostings.length > 0 && (
+                    <div className="mb-6 bg-[#f9fafb] rounded-lg px-4 py-3 border border-[#e5e7eb]">
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          checked={allSelected}
+                          ref={(input) => {
+                            if (input) input.indeterminate = someSelected;
+                          }}
+                          onChange={(e) => handleSelectAll(e.target.checked)}
+                          className="w-5 h-5 rounded-md flex-shrink-0 transition-all duration-200 cursor-pointer focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                        />
+                        <span className="text-sm font-medium text-foreground">
+                          {selectedIds.size > 0
+                            ? `${filteredJobPostings.filter((p) => selectedIds.has(p.id)).length} of ${filteredJobPostings.length} job posting${filteredJobPostings.length !== 1 ? "s" : ""} selected`
+                            : "Select all"}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Job Postings Grid */}
+                  <div className="grid gap-6 sm:gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {filteredJobPostings.map((posting) => {
                   const statusBadge = getStatusBadge(
                     posting.fields.Status,
                     posting.fields["Hạn chót nhận"]
@@ -706,6 +845,8 @@ export function JobPostingsPage() {
                   );
                 })}
               </div>
+                </>
+              )}
             </>
           )}
         </div>
