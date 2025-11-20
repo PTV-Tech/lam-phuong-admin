@@ -10,7 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { MultiSelect } from "@/components/MultiSelect";
-import { useLazyData } from "@/hooks/useLazyData";
+import { useLocations } from "@/hooks/useLocations";
 import {
   getJobPostings,
   deleteJobPosting,
@@ -133,37 +133,41 @@ export function JobPostingsPage() {
   const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
   const [locationFetchError, setLocationFetchError] = useState<string | null>(null);
 
-  // Lazy loading hook for locations
-  const { dataCache, loading: lazyLoading, fetchLocations } = useLazyData();
+  // Use locations hook with 3-layer caching
+  const { locations: locationsData, isLoading: locationsLoading, error: locationsError } = useLocations();
 
-  // Ref to prevent duplicate calls during StrictMode double render
-  const fetchingRef = useRef(false);
-
-  // Handle location fetch with error handling
+  // Handle location fetch (no-op since data is already loaded via hook)
   const handleFetchLocations = useCallback(async () => {
-    try {
-      setLocationFetchError(null);
-      await fetchLocations();
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Failed to load locations";
-      setLocationFetchError(errorMessage);
-      console.error("Error fetching locations:", err);
-      throw err; // Re-throw so MultiSelect can handle it
+    // Data is already loaded via useLocations hook
+    // This is kept for compatibility with MultiSelect's onOpen prop
+    if (locationsError) {
+      setLocationFetchError(
+        locationsError instanceof Error ? locationsError.message : "Failed to load locations"
+      );
     }
-  }, [fetchLocations]);
+  }, [locationsError]);
 
-  // Get locations options from API data
+  // Get locations options from hook data
   const locationOptions = useMemo(() => {
-    const locations = dataCache.locations || [];
-    return locations
+    return locationsData
       .filter((loc) => loc.fields.Name && loc.fields.Name.trim())
       .map((loc) => ({
         id: loc.fields.Name || "",
         label: loc.fields.Name || "",
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [dataCache.locations]);
+  }, [locationsData]);
+
+  // Set error from hook
+  useEffect(() => {
+    if (locationsError) {
+      setLocationFetchError(
+        locationsError instanceof Error ? locationsError.message : "Failed to load locations"
+      );
+    } else {
+      setLocationFetchError(null);
+    }
+  }, [locationsError]);
 
   // Debounce search query
   useEffect(() => {
@@ -210,6 +214,9 @@ export function JobPostingsPage() {
   const handleClearLocations = useCallback(() => {
     setSelectedLocations([]);
   }, []);
+
+  // Ref to prevent duplicate calls during StrictMode double render
+  const fetchingRef = useRef(false);
 
   const loadJobPostings = useCallback(async () => {
     // Prevent duplicate calls
@@ -608,7 +615,7 @@ export function JobPostingsPage() {
                       onChange={setSelectedLocations}
                       placeholder="All Locations / Tất cả khu vực"
                       className="w-full"
-                      loading={lazyLoading.locations}
+                      loading={locationsLoading}
                       onOpen={handleFetchLocations}
                     />
                     {locationFetchError && (

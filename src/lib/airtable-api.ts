@@ -4,6 +4,7 @@
 
 import { getValidAccessToken } from './airtable-oauth'
 import slugify from 'slugify'
+import { airtableRateLimiter } from './rate-limiter'
 
 const AIRTABLE_API_BASE_URL = 'https://api.airtable.com/v0'
 
@@ -131,6 +132,29 @@ export interface JobPostingFields {
 }
 
 /**
+ * Helper function to execute any Airtable API call with rate limiting
+ */
+async function executeAirtableRequest<T>(
+  requestFn: () => Promise<T>
+): Promise<T> {
+  return airtableRateLimiter.execute(async () => {
+    try {
+      return await requestFn()
+    } catch (error) {
+      // Re-throw rate limit errors
+      if (error instanceof Error && error.message.includes('RATE_LIMIT')) {
+        throw error
+      }
+      // Check response status for rate limit
+      if (error instanceof Response && error.status === 429) {
+        throw new Error('RATE_LIMIT: Too many requests. Please try again later.')
+      }
+      throw error
+    }
+  })
+}
+
+/**
  * Fetch records from an Airtable table
  */
 async function fetchAirtableRecords<T = Record<string, any>>(
@@ -143,47 +167,53 @@ async function fetchAirtableRecords<T = Record<string, any>>(
     fields?: string[]
   }
 ): Promise<AirtableResponse<T>> {
-  const accessToken = await getValidAccessToken()
-  if (!accessToken) {
-    throw new Error('No valid access token. Please log in again.')
-  }
+  return executeAirtableRequest(async () => {
+    const accessToken = await getValidAccessToken()
+    if (!accessToken) {
+      throw new Error('No valid access token. Please log in again.')
+    }
 
-  const baseId = getAirtableBaseId()
-  const url = new URL(`${AIRTABLE_API_BASE_URL}/${baseId}/${encodeURIComponent(tableName)}`)
+    const baseId = getAirtableBaseId()
+    const url = new URL(`${AIRTABLE_API_BASE_URL}/${baseId}/${encodeURIComponent(tableName)}`)
 
-  if (options?.maxRecords) {
-    url.searchParams.append('maxRecords', options.maxRecords.toString())
-  }
-  if (options?.view) {
-    url.searchParams.append('view', options.view)
-  }
-  if (options?.filterByFormula) {
-    url.searchParams.append('filterByFormula', options.filterByFormula)
-  }
-  if (options?.sort) {
-    options.sort.forEach((sort, index) => {
-      url.searchParams.append(`sort[${index}][field]`, sort.field)
-      url.searchParams.append(`sort[${index}][direction]`, sort.direction)
+    if (options?.maxRecords) {
+      url.searchParams.append('maxRecords', options.maxRecords.toString())
+    }
+    if (options?.view) {
+      url.searchParams.append('view', options.view)
+    }
+    if (options?.filterByFormula) {
+      url.searchParams.append('filterByFormula', options.filterByFormula)
+    }
+    if (options?.sort) {
+      options.sort.forEach((sort, index) => {
+        url.searchParams.append(`sort[${index}][field]`, sort.field)
+        url.searchParams.append(`sort[${index}][direction]`, sort.direction)
+      })
+    }
+    if (options?.fields && options.fields.length > 0) {
+      options.fields.forEach(field => {
+        url.searchParams.append('fields[]', field)
+      })
+    }
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
     })
-  }
-  if (options?.fields && options.fields.length > 0) {
-    options.fields.forEach(field => {
-      url.searchParams.append('fields[]', field)
-    })
-  }
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
+    if (!response.ok) {
+      const error = await response.text()
+      // Check for rate limit errors
+      if (response.status === 429 || error.includes('RATE_LIMIT')) {
+        throw new Error('RATE_LIMIT: Too many requests. Please try again later.')
+      }
+      throw new Error(`Failed to fetch records: ${error}`)
+    }
+
+    return response.json()
   })
-
-  if (!response.ok) {
-    const error = await response.text()
-    throw new Error(`Failed to fetch records: ${error}`)
-  }
-
-  return response.json()
 }
 
 /**
@@ -258,96 +288,111 @@ export async function generateUniqueSlug(name: string): Promise<string> {
  * Create a new location in Airtable
  */
 export async function createLocation(fields: LocationFields): Promise<AirtableRecord<LocationFields>> {
-  const accessToken = await getValidAccessToken()
-  if (!accessToken) {
-    throw new Error('No valid access token. Please log in again.')
-  }
+  return executeAirtableRequest(async () => {
+    const accessToken = await getValidAccessToken()
+    if (!accessToken) {
+      throw new Error('No valid access token. Please log in again.')
+    }
 
-  const baseId = getAirtableBaseId()
-  const tableName = getLocationsTableName()
-  const url = `${AIRTABLE_API_BASE_URL}/${baseId}/${encodeURIComponent(tableName)}`
+    const baseId = getAirtableBaseId()
+    const tableName = getLocationsTableName()
+    const url = `${AIRTABLE_API_BASE_URL}/${baseId}/${encodeURIComponent(tableName)}`
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      records: [
-        {
-          fields: fields,
-        },
-      ],
-    }),
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        records: [
+          {
+            fields: fields,
+          },
+        ],
+      }),
+    })
+
+    if (!response.ok) {
+      const error = await response.text()
+      if (response.status === 429 || error.includes('RATE_LIMIT')) {
+        throw new Error('RATE_LIMIT: Too many requests. Please try again later.')
+      }
+      throw new Error(`Failed to create location: ${error}`)
+    }
+
+    const data = await response.json()
+    return data.records[0]
   })
-
-  if (!response.ok) {
-    const error = await response.text()
-    throw new Error(`Failed to create location: ${error}`)
-  }
-
-  const data = await response.json()
-  return data.records[0]
 }
 
 /**
  * Update a location in Airtable
  */
 export async function updateLocation(recordId: string, fields: Partial<LocationFields>): Promise<AirtableRecord<LocationFields>> {
-  const accessToken = await getValidAccessToken()
-  if (!accessToken) {
-    throw new Error('No valid access token. Please log in again.')
-  }
+  return executeAirtableRequest(async () => {
+    const accessToken = await getValidAccessToken()
+    if (!accessToken) {
+      throw new Error('No valid access token. Please log in again.')
+    }
 
-  const baseId = getAirtableBaseId()
-  const tableName = getLocationsTableName()
-  const url = `${AIRTABLE_API_BASE_URL}/${baseId}/${encodeURIComponent(tableName)}/${recordId}`
+    const baseId = getAirtableBaseId()
+    const tableName = getLocationsTableName()
+    const url = `${AIRTABLE_API_BASE_URL}/${baseId}/${encodeURIComponent(tableName)}/${recordId}`
 
-  const response = await fetch(url, {
-    method: 'PATCH',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      fields: fields,
-    }),
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        fields: fields,
+      }),
+    })
+
+    if (!response.ok) {
+      const error = await response.text()
+      if (response.status === 429 || error.includes('RATE_LIMIT')) {
+        throw new Error('RATE_LIMIT: Too many requests. Please try again later.')
+      }
+      throw new Error(`Failed to update location: ${error}`)
+    }
+
+    const data = await response.json()
+    return data
   })
-
-  if (!response.ok) {
-    const error = await response.text()
-    throw new Error(`Failed to update location: ${error}`)
-  }
-
-  const data = await response.json()
-  return data
 }
 
 /**
  * Delete a single location from Airtable
  */
 export async function deleteLocation(recordId: string): Promise<void> {
-  const accessToken = await getValidAccessToken()
-  if (!accessToken) {
-    throw new Error('No valid access token. Please log in again.')
-  }
+  return executeAirtableRequest(async () => {
+    const accessToken = await getValidAccessToken()
+    if (!accessToken) {
+      throw new Error('No valid access token. Please log in again.')
+    }
 
-  const baseId = getAirtableBaseId()
-  const tableName = getLocationsTableName()
-  const url = `${AIRTABLE_API_BASE_URL}/${baseId}/${encodeURIComponent(tableName)}/${recordId}`
+    const baseId = getAirtableBaseId()
+    const tableName = getLocationsTableName()
+    const url = `${AIRTABLE_API_BASE_URL}/${baseId}/${encodeURIComponent(tableName)}/${recordId}`
 
-  const response = await fetch(url, {
-    method: 'DELETE',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    })
+
+    if (!response.ok) {
+      const error = await response.text()
+      if (response.status === 429 || error.includes('RATE_LIMIT')) {
+        throw new Error('RATE_LIMIT: Too many requests. Please try again later.')
+      }
+      throw new Error(`Failed to delete location: ${error}`)
+    }
   })
-
-  if (!response.ok) {
-    const error = await response.text()
-    throw new Error(`Failed to delete location: ${error}`)
-  }
 }
 
 /**
@@ -359,37 +404,42 @@ export async function deleteLocations(recordIds: string[]): Promise<void> {
     return
   }
 
-  const accessToken = await getValidAccessToken()
-  if (!accessToken) {
-    throw new Error('No valid access token. Please log in again.')
-  }
-
-  const baseId = getAirtableBaseId()
-  const tableName = getLocationsTableName()
-  const MAX_RECORDS_PER_REQUEST = 10
-  
-  // Split into chunks of 10 (Airtable's limit)
-  for (let i = 0; i < recordIds.length; i += MAX_RECORDS_PER_REQUEST) {
-    const chunk = recordIds.slice(i, i + MAX_RECORDS_PER_REQUEST)
-    const url = new URL(`${AIRTABLE_API_BASE_URL}/${baseId}/${encodeURIComponent(tableName)}`)
-    
-    // Add record IDs as query parameters
-    chunk.forEach(id => {
-      url.searchParams.append('records[]', id)
-    })
-
-    const response = await fetch(url.toString(), {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    })
-
-    if (!response.ok) {
-      const error = await response.text()
-      throw new Error(`Failed to delete locations: ${error}`)
+  return executeAirtableRequest(async () => {
+    const accessToken = await getValidAccessToken()
+    if (!accessToken) {
+      throw new Error('No valid access token. Please log in again.')
     }
-  }
+
+    const baseId = getAirtableBaseId()
+    const tableName = getLocationsTableName()
+    const MAX_RECORDS_PER_REQUEST = 10
+    
+    // Split into chunks of 10 (Airtable's limit)
+    for (let i = 0; i < recordIds.length; i += MAX_RECORDS_PER_REQUEST) {
+      const chunk = recordIds.slice(i, i + MAX_RECORDS_PER_REQUEST)
+      const url = new URL(`${AIRTABLE_API_BASE_URL}/${baseId}/${encodeURIComponent(tableName)}`)
+      
+      // Add record IDs as query parameters
+      chunk.forEach(id => {
+        url.searchParams.append('records[]', id)
+      })
+
+      const response = await fetch(url.toString(), {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      if (!response.ok) {
+        const error = await response.text()
+        if (response.status === 429 || error.includes('RATE_LIMIT')) {
+          throw new Error('RATE_LIMIT: Too many requests. Please try again later.')
+        }
+        throw new Error(`Failed to delete locations: ${error}`)
+      }
+    }
+  })
 }
 
 /**

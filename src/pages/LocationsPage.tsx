@@ -3,11 +3,11 @@ import { AppLayout } from '@/components/AppLayout'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { LocationFormDialog } from '@/components/LocationFormDialog'
-import { getLocations, createLocation, updateLocation, deleteLocation, deleteLocations, type LocationFields, type AirtableRecord } from '@/lib/airtable-api'
+import { createLocation, updateLocation, deleteLocation, deleteLocations, type LocationFields, type AirtableRecord } from '@/lib/airtable-api'
+import { useLocations } from '@/hooks/useLocations'
 
 export function LocationsPage() {
-  const [locations, setLocations] = useState<AirtableRecord<LocationFields>[]>([])
-  const [loading, setLoading] = useState(true)
+  const { locations: locationsData, isLoading, error: locationsError, invalidateCache } = useLocations()
   const [error, setError] = useState<string | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -15,28 +15,25 @@ export function LocationsPage() {
   const [deleting, setDeleting] = useState(false)
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set())
 
-  useEffect(() => {
-    loadLocations()
-  }, [])
+  // Use locations directly from hook
+  const locations = locationsData
 
-  const loadLocations = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      const response = await getLocations()
-      setLocations(response.records)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load locations')
-      console.error('Error loading locations:', err)
-    } finally {
-      setLoading(false)
+  // Set error from hook
+  useEffect(() => {
+    if (locationsError) {
+      setError(locationsError instanceof Error ? locationsError.message : 'Failed to load locations')
     }
-  }
+  }, [locationsError])
 
   const handleCreateLocation = async (fields: LocationFields) => {
-    await createLocation(fields)
-    // Reload locations after creating
-    await loadLocations()
+    try {
+      await createLocation(fields)
+      // Invalidate cache to force refresh
+      await invalidateCache()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create location')
+      throw err
+    }
   }
 
   const handleToggleSelect = (id: string) => {
@@ -70,10 +67,10 @@ export function LocationsPage() {
         await deleteLocations(idsToDelete)
       }
       
-      // Clear selection and reload
+      // Clear selection and invalidate cache
       setSelectedIds(new Set())
       setDeleteConfirm({ open: false, ids: [] })
-      await loadLocations()
+      await invalidateCache()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete location(s)')
       setDeleteConfirm({ open: false, ids: [] })
@@ -102,8 +99,8 @@ export function LocationsPage() {
       ))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update location status')
-      // Reload to sync with server
-      await loadLocations()
+      // Invalidate cache to sync with server
+      await invalidateCache()
     } finally {
       setTogglingIds(prev => {
         const newSet = new Set(prev)
@@ -215,7 +212,7 @@ export function LocationsPage() {
           </div>
         </div>
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        {loading ? (
+        {isLoading && locations.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20">
             <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent"></div>
             <span className="mt-4 text-muted-foreground font-medium">Loading locations...</span>
@@ -242,10 +239,10 @@ export function LocationsPage() {
                 </svg>
               </div>
               <CardTitle className="text-destructive">Error Loading Locations</CardTitle>
-              <CardDescription className="mt-2">{error}</CardDescription>
+              <CardDescription className="mt-2">{error || (locationsError instanceof Error ? locationsError.message : 'Failed to load locations')}</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button onClick={loadLocations} className="w-full" size="lg">
+              <Button onClick={() => invalidateCache()} className="w-full" size="lg">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   width="16"
