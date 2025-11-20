@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/card";
 import { MultiSelect } from "@/components/MultiSelect";
 import { useLocations } from "@/hooks/useLocations";
+import { useJobCategories } from "@/hooks/useJobCategories";
 import {
   getJobPostings,
   deleteJobPosting,
@@ -131,10 +132,15 @@ export function JobPostingsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [locationFetchError, setLocationFetchError] = useState<string | null>(null);
+  const [categoryFetchError, setCategoryFetchError] = useState<string | null>(null);
 
   // Use locations hook with 3-layer caching
   const { locations: locationsData, isLoading: locationsLoading, error: locationsError } = useLocations();
+
+  // Use job categories hook with 3-layer caching
+  const { jobCategories: jobCategoriesData, isLoading: jobCategoriesLoading, error: jobCategoriesError } = useJobCategories();
 
   // Handle location fetch (no-op since data is already loaded via hook)
   const handleFetchLocations = useCallback(async () => {
@@ -147,6 +153,17 @@ export function JobPostingsPage() {
     }
   }, [locationsError]);
 
+  // Handle job categories fetch (no-op since data is already loaded via hook)
+  const handleFetchCategories = useCallback(async () => {
+    // Data is already loaded via useJobCategories hook
+    // This is kept for compatibility with MultiSelect's onOpen prop
+    if (jobCategoriesError) {
+      setCategoryFetchError(
+        jobCategoriesError instanceof Error ? jobCategoriesError.message : "Failed to load job categories"
+      );
+    }
+  }, [jobCategoriesError]);
+
   // Get locations options from hook data
   const locationOptions = useMemo(() => {
     return locationsData
@@ -158,7 +175,18 @@ export function JobPostingsPage() {
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [locationsData]);
 
-  // Set error from hook
+  // Get job categories options from hook data
+  const categoryOptions = useMemo(() => {
+    return jobCategoriesData
+      .filter((cat) => cat.fields.Name && cat.fields.Name.trim())
+      .map((cat) => ({
+        id: cat.fields.Name || "",
+        label: cat.fields.Name || "",
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [jobCategoriesData]);
+
+  // Set error from hooks
   useEffect(() => {
     if (locationsError) {
       setLocationFetchError(
@@ -169,6 +197,16 @@ export function JobPostingsPage() {
     }
   }, [locationsError]);
 
+  useEffect(() => {
+    if (jobCategoriesError) {
+      setCategoryFetchError(
+        jobCategoriesError instanceof Error ? jobCategoriesError.message : "Failed to load job categories"
+      );
+    } else {
+      setCategoryFetchError(null);
+    }
+  }, [jobCategoriesError]);
+
   // Debounce search query
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -178,7 +216,7 @@ export function JobPostingsPage() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Optimized filtering with useMemo (search AND location filter)
+  // Optimized filtering with useMemo (search AND location AND category filter)
   const filteredJobPostings = useMemo(() => {
     return jobPostings.filter((posting) => {
       // Search filter (by title)
@@ -200,9 +238,22 @@ export function JobPostingsPage() {
           );
         })();
 
-      return matchesSearch && matchesLocation;
+      // Category filter (by category names in "Tên danh mục công việc" array)
+      const matchesCategory =
+        selectedCategories.length === 0 ||
+        (() => {
+          const postingCategories = posting.fields["Tên danh mục công việc"] || [];
+          if (postingCategories.length === 0) return false;
+
+          // Check if any posting category matches any selected category
+          return postingCategories.some((postingCat) =>
+            selectedCategories.includes(postingCat)
+          );
+        })();
+
+      return matchesSearch && matchesLocation && matchesCategory;
     });
-  }, [jobPostings, debouncedSearchQuery, selectedLocations]);
+  }, [jobPostings, debouncedSearchQuery, selectedLocations, selectedCategories]);
 
   // Clear search function
   const handleClearSearch = useCallback(() => {
@@ -213,6 +264,11 @@ export function JobPostingsPage() {
   // Clear location filter
   const handleClearLocations = useCallback(() => {
     setSelectedLocations([]);
+  }, []);
+
+  // Clear category filter
+  const handleClearCategories = useCallback(() => {
+    setSelectedCategories([]);
   }, []);
 
   // Ref to prevent duplicate calls during StrictMode double render
@@ -660,15 +716,73 @@ export function JobPostingsPage() {
                       </div>
                     )}
                   </div>
+
+                  {/* Job Categories Filter */}
+                  <div className="flex-1 sm:max-w-xs">
+                    <label htmlFor="category-filter" className="sr-only">
+                      Filter by job category
+                    </label>
+                    <MultiSelect
+                      options={categoryOptions}
+                      value={selectedCategories}
+                      onChange={setSelectedCategories}
+                      placeholder="All Categories / Tất cả danh mục"
+                      className="w-full"
+                      loading={jobCategoriesLoading}
+                      onOpen={handleFetchCategories}
+                    />
+                    {categoryFetchError && (
+                      <div className="mt-2 p-2 rounded-md bg-destructive/10 border border-destructive/20">
+                        <div className="flex items-start gap-2">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="text-destructive flex-shrink-0 mt-0.5"
+                          >
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="12" y1="8" x2="12" y2="12" />
+                            <line x1="12" y1="16" x2="12.01" y2="16" />
+                          </svg>
+                          <div className="flex-1">
+                            <p className="text-sm text-destructive font-medium">
+                              {categoryFetchError.includes("RATE_LIMIT")
+                                ? "Too many requests. Please wait a moment and try again."
+                                : "Failed to load job categories"}
+                            </p>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="mt-2"
+                              onClick={() => {
+                                setCategoryFetchError(null);
+                                handleFetchCategories();
+                              }}
+                            >
+                              Retry
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                {/* Selected Location Tags */}
-                {selectedLocations.length > 0 && (
+                {/* Selected Filter Tags */}
+                {(selectedLocations.length > 0 || selectedCategories.length > 0) && (
                   <div className="mt-4 flex flex-wrap items-center gap-2">
                     <span className="text-sm text-muted-foreground">Filtered by:</span>
+                    {/* Location Tags */}
                     {selectedLocations.map((location) => (
                       <span
-                        key={location}
+                        key={`location-${location}`}
                         className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-700"
                       >
                         <svg
@@ -714,19 +828,74 @@ export function JobPostingsPage() {
                         </button>
                       </span>
                     ))}
-                    <button
-                      type="button"
-                      onClick={handleClearLocations}
-                      className="text-sm text-blue-600 hover:text-blue-800 font-medium underline"
-                    >
-                      Clear all
-                    </button>
+                    {/* Category Tags */}
+                    {selectedCategories.map((category) => (
+                      <span
+                        key={`category-${category}`}
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-700"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="12"
+                          height="12"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+                          <path d="M3 9h18" />
+                          <path d="M9 21V9" />
+                        </svg>
+                        {category}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedCategories((prev) =>
+                              prev.filter((cat) => cat !== category)
+                            )
+                          }
+                          className="ml-1 hover:text-green-900 transition-colors"
+                          aria-label={`Remove ${category} filter`}
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="15" y1="9" x2="9" y2="15" />
+                            <line x1="9" y1="9" x2="15" y2="15" />
+                          </svg>
+                        </button>
+                      </span>
+                    ))}
+                    {(selectedLocations.length > 0 || selectedCategories.length > 0) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleClearLocations();
+                          handleClearCategories();
+                        }}
+                        className="text-sm text-blue-600 hover:text-blue-800 font-medium underline"
+                      >
+                        Clear all filters
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
 
               {/* Result Count */}
-              {(debouncedSearchQuery || selectedLocations.length > 0) && (
+              {(debouncedSearchQuery || selectedLocations.length > 0 || selectedCategories.length > 0) && (
                 <div className="mb-4 text-sm text-muted-foreground">
                   Showing {filteredJobPostings.length} of {jobPostings.length}{" "}
                   job posting{jobPostings.length !== 1 ? "s" : ""}
@@ -757,21 +926,32 @@ export function JobPostingsPage() {
                     </div>
                     <CardTitle>No job postings found</CardTitle>
                     <CardDescription className="mt-2">
-                      {debouncedSearchQuery && selectedLocations.length > 0
-                        ? `No job postings match "${debouncedSearchQuery}" in selected locations`
-                        : debouncedSearchQuery
-                        ? `No job postings match "${debouncedSearchQuery}"`
-                        : selectedLocations.length > 0
-                        ? "No job postings found in selected locations"
-                        : "Try adjusting your search or filters"}
+                      {(() => {
+                        const hasSearch = debouncedSearchQuery.length > 0;
+                        const hasLocations = selectedLocations.length > 0;
+                        const hasCategories = selectedCategories.length > 0;
+                        const filterCount = [hasSearch, hasLocations, hasCategories].filter(Boolean).length;
+
+                        if (filterCount > 1) {
+                          return `No job postings match your filters`;
+                        } else if (hasSearch) {
+                          return `No job postings match "${debouncedSearchQuery}"`;
+                        } else if (hasLocations) {
+                          return "No job postings found in selected locations";
+                        } else if (hasCategories) {
+                          return "No job postings found in selected categories";
+                        }
+                        return "Try adjusting your search or filters";
+                      })()}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-2">
-                    {(debouncedSearchQuery || selectedLocations.length > 0) && (
+                    {(debouncedSearchQuery || selectedLocations.length > 0 || selectedCategories.length > 0) && (
                       <Button
                         onClick={() => {
                           handleClearSearch();
                           handleClearLocations();
+                          handleClearCategories();
                         }}
                         className="w-full"
                         size="lg"
@@ -798,6 +978,16 @@ export function JobPostingsPage() {
                         variant="outline"
                       >
                         Clear location filter
+                      </Button>
+                    )}
+                    {selectedCategories.length > 0 && (
+                      <Button
+                        onClick={handleClearCategories}
+                        className="w-full"
+                        size="lg"
+                        variant="outline"
+                      >
+                        Clear category filter
                       </Button>
                     )}
                   </CardContent>
