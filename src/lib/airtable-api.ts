@@ -863,6 +863,7 @@ export async function getJobTypes(options?: {
   view?: string
   filterByFormula?: string
   sort?: Array<{ field: string; direction: 'asc' | 'desc' }>
+  fields?: string[]
 }): Promise<AirtableResponse<JobTypeFields>> {
   const tableName = getJobTypesTableName()
   return fetchAirtableRecords<JobTypeFields>(tableName, options)

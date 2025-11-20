@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { JobTypeFormDialog } from '@/components/JobTypeFormDialog'
 import { getJobTypes, createJobType, updateJobType, deleteJobType, deleteJobTypes, type JobTypeFields, type AirtableRecord } from '@/lib/airtable-api'
+import { useJobTypes } from '@/hooks/useJobTypes'
 
 export function JobTypesPage() {
   const [jobTypes, setJobTypes] = useState<AirtableRecord<JobTypeFields>[]>([])
@@ -14,6 +15,9 @@ export function JobTypesPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; ids: string[] }>({ open: false, ids: [] })
   const [deleting, setDeleting] = useState(false)
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set())
+
+  // Get cache invalidation function from hook
+  const { invalidateCache } = useJobTypes()
 
   useEffect(() => {
     loadJobTypes()
@@ -35,7 +39,8 @@ export function JobTypesPage() {
 
   const handleCreateJobType = async (fields: JobTypeFields) => {
     await createJobType(fields)
-    // Reload job types after creating
+    // Invalidate cache and reload job types after creating
+    await invalidateCache()
     await loadJobTypes()
   }
 
@@ -70,7 +75,8 @@ export function JobTypesPage() {
         await deleteJobTypes(idsToDelete)
       }
       
-      // Clear selection and reload
+      // Invalidate cache, clear selection and reload
+      await invalidateCache()
       setSelectedIds(new Set())
       setDeleteConfirm({ open: false, ids: [] })
       await loadJobTypes()
@@ -94,7 +100,8 @@ export function JobTypesPage() {
       const newStatus = currentStatus === "Active" ? "Disabled" : "Active"
       await updateJobType(jobTypeId, { Status: newStatus })
       
-      // Update local state optimistically
+      // Invalidate cache and update local state optimistically
+      await invalidateCache()
       setJobTypes(prev => prev.map(jt => 
         jt.id === jobTypeId 
           ? { ...jt, fields: { ...jt.fields, Status: newStatus } }

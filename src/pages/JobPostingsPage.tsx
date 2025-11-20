@@ -12,6 +12,7 @@ import {
 import { MultiSelect } from "@/components/MultiSelect";
 import { useLocations } from "@/hooks/useLocations";
 import { useJobCategories } from "@/hooks/useJobCategories";
+import { useJobTypes } from "@/hooks/useJobTypes";
 import {
   getJobPostings,
   deleteJobPosting,
@@ -133,14 +134,19 @@ export function JobPostingsPage() {
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedJobTypes, setSelectedJobTypes] = useState<string[]>([]);
   const [locationFetchError, setLocationFetchError] = useState<string | null>(null);
   const [categoryFetchError, setCategoryFetchError] = useState<string | null>(null);
+  const [jobTypeFetchError, setJobTypeFetchError] = useState<string | null>(null);
 
   // Use locations hook with 3-layer caching
   const { locations: locationsData, isLoading: locationsLoading, error: locationsError } = useLocations();
 
   // Use job categories hook with 3-layer caching
   const { jobCategories: jobCategoriesData, isLoading: jobCategoriesLoading, error: jobCategoriesError } = useJobCategories();
+
+  // Use job types hook with 3-layer caching
+  const { jobTypes: jobTypesData, isLoading: jobTypesLoading, error: jobTypesError } = useJobTypes();
 
   // Handle location fetch (no-op since data is already loaded via hook)
   const handleFetchLocations = useCallback(async () => {
@@ -163,6 +169,17 @@ export function JobPostingsPage() {
       );
     }
   }, [jobCategoriesError]);
+
+  // Handle job types fetch (no-op since data is already loaded via hook)
+  const handleFetchJobTypes = useCallback(async () => {
+    // Data is already loaded via useJobTypes hook
+    // This is kept for compatibility with MultiSelect's onOpen prop
+    if (jobTypesError) {
+      setJobTypeFetchError(
+        jobTypesError instanceof Error ? jobTypesError.message : "Failed to load job types"
+      );
+    }
+  }, [jobTypesError]);
 
   // Get locations options from hook data
   const locationOptions = useMemo(() => {
@@ -189,6 +206,17 @@ export function JobPostingsPage() {
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [jobCategoriesData]);
 
+  // Get job types options from hook data
+  const jobTypeOptions = useMemo(() => {
+    return jobTypesData
+      .filter((type) => type.fields.Name && type.fields.Name.trim())
+      .map((type) => ({
+        id: type.fields.Name || "",
+        label: type.fields.Name || "",
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [jobTypesData]);
+
   // Set error from hooks
   useEffect(() => {
     if (locationsError) {
@@ -210,6 +238,16 @@ export function JobPostingsPage() {
     }
   }, [jobCategoriesError]);
 
+  useEffect(() => {
+    if (jobTypesError) {
+      setJobTypeFetchError(
+        jobTypesError instanceof Error ? jobTypesError.message : "Failed to load job types"
+      );
+    } else {
+      setJobTypeFetchError(null);
+    }
+  }, [jobTypesError]);
+
   // Debounce search query
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -219,7 +257,7 @@ export function JobPostingsPage() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Optimized filtering with useMemo (search AND location AND category filter)
+  // Optimized filtering with useMemo (search AND location AND category AND job type filter)
   const filteredJobPostings = useMemo(() => {
     return jobPostings.filter((posting) => {
       // Search filter (by title)
@@ -254,9 +292,22 @@ export function JobPostingsPage() {
           );
         })();
 
-      return matchesSearch && matchesLocation && matchesCategory;
+      // Job Type filter (by job type names in "Tên loại công việc" array)
+      const matchesJobType =
+        selectedJobTypes.length === 0 ||
+        (() => {
+          const postingJobTypes = posting.fields["Tên loại công việc"] || [];
+          if (postingJobTypes.length === 0) return false;
+
+          // Check if any posting job type matches any selected job type
+          return postingJobTypes.some((postingJobType) =>
+            selectedJobTypes.includes(postingJobType)
+          );
+        })();
+
+      return matchesSearch && matchesLocation && matchesCategory && matchesJobType;
     });
-  }, [jobPostings, debouncedSearchQuery, selectedLocations, selectedCategories]);
+  }, [jobPostings, debouncedSearchQuery, selectedLocations, selectedCategories, selectedJobTypes]);
 
   // Clear search function
   const handleClearSearch = useCallback(() => {
@@ -272,6 +323,11 @@ export function JobPostingsPage() {
   // Clear category filter
   const handleClearCategories = useCallback(() => {
     setSelectedCategories([]);
+  }, []);
+
+  // Clear job type filter
+  const handleClearJobTypes = useCallback(() => {
+    setSelectedJobTypes([]);
   }, []);
 
   // Ref to prevent duplicate calls during StrictMode double render
@@ -776,10 +832,67 @@ export function JobPostingsPage() {
                       </div>
                     )}
                   </div>
+
+                  {/* Job Types Filter */}
+                  <div className="flex-1 sm:max-w-xs">
+                    <label htmlFor="job-type-filter" className="sr-only">
+                      Filter by job type
+                    </label>
+                    <MultiSelect
+                      options={jobTypeOptions}
+                      value={selectedJobTypes}
+                      onChange={setSelectedJobTypes}
+                      placeholder="Loại công việc / All Job Types"
+                      className="w-full"
+                      loading={jobTypesLoading}
+                      onOpen={handleFetchJobTypes}
+                    />
+                    {jobTypeFetchError && (
+                      <div className="mt-2 p-2 rounded-md bg-destructive/10 border border-destructive/20">
+                        <div className="flex items-start gap-2">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="text-destructive flex-shrink-0 mt-0.5"
+                          >
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="12" y1="8" x2="12" y2="12" />
+                            <line x1="12" y1="16" x2="12.01" y2="16" />
+                          </svg>
+                          <div className="flex-1">
+                            <p className="text-sm text-destructive font-medium">
+                              {jobTypeFetchError.includes("RATE_LIMIT")
+                                ? "Too many requests. Please wait a moment and try again."
+                                : "Failed to load job types"}
+                            </p>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="mt-2"
+                              onClick={() => {
+                                setJobTypeFetchError(null);
+                                handleFetchJobTypes();
+                              }}
+                            >
+                              Retry
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Selected Filter Tags */}
-                {(selectedLocations.length > 0 || selectedCategories.length > 0) && (
+                {(selectedLocations.length > 0 || selectedCategories.length > 0 || selectedJobTypes.length > 0) && (
                   <div className="mt-4 flex flex-wrap items-center gap-2">
                     <span className="text-sm text-muted-foreground">Filtered by:</span>
                     {/* Location Tags */}
@@ -881,12 +994,64 @@ export function JobPostingsPage() {
                         </button>
                       </span>
                     ))}
-                    {(selectedLocations.length > 0 || selectedCategories.length > 0) && (
+                    {/* Job Type Tags */}
+                    {selectedJobTypes.map((jobType) => (
+                      <span
+                        key={`job-type-${jobType}`}
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-700"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="12"
+                          height="12"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                          <circle cx="9" cy="7" r="4" />
+                          <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                        </svg>
+                        {jobType}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedJobTypes((prev) =>
+                              prev.filter((type) => type !== jobType)
+                            )
+                          }
+                          className="ml-1 hover:text-purple-900 transition-colors"
+                          aria-label={`Remove ${jobType} filter`}
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="15" y1="9" x2="9" y2="15" />
+                            <line x1="9" y1="9" x2="15" y2="15" />
+                          </svg>
+                        </button>
+                      </span>
+                    ))}
+                    {(selectedLocations.length > 0 || selectedCategories.length > 0 || selectedJobTypes.length > 0) && (
                       <button
                         type="button"
                         onClick={() => {
                           handleClearLocations();
                           handleClearCategories();
+                          handleClearJobTypes();
                         }}
                         className="text-sm text-blue-600 hover:text-blue-800 font-medium underline"
                       >
@@ -898,7 +1063,7 @@ export function JobPostingsPage() {
               </div>
 
               {/* Result Count */}
-              {(debouncedSearchQuery || selectedLocations.length > 0 || selectedCategories.length > 0) && (
+              {(debouncedSearchQuery || selectedLocations.length > 0 || selectedCategories.length > 0 || selectedJobTypes.length > 0) && (
                 <div className="mb-4 text-sm text-muted-foreground">
                   Showing {filteredJobPostings.length} of {jobPostings.length}{" "}
                   job posting{jobPostings.length !== 1 ? "s" : ""}
@@ -933,7 +1098,8 @@ export function JobPostingsPage() {
                         const hasSearch = debouncedSearchQuery.length > 0;
                         const hasLocations = selectedLocations.length > 0;
                         const hasCategories = selectedCategories.length > 0;
-                        const filterCount = [hasSearch, hasLocations, hasCategories].filter(Boolean).length;
+                        const hasJobTypes = selectedJobTypes.length > 0;
+                        const filterCount = [hasSearch, hasLocations, hasCategories, hasJobTypes].filter(Boolean).length;
 
                         if (filterCount > 1) {
                           return `No job postings match your filters`;
@@ -943,18 +1109,21 @@ export function JobPostingsPage() {
                           return "No job postings found in selected locations";
                         } else if (hasCategories) {
                           return "No job postings found in selected categories";
+                        } else if (hasJobTypes) {
+                          return "No job postings found in selected job types";
                         }
                         return "Try adjusting your search or filters";
                       })()}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-2">
-                    {(debouncedSearchQuery || selectedLocations.length > 0 || selectedCategories.length > 0) && (
+                    {(debouncedSearchQuery || selectedLocations.length > 0 || selectedCategories.length > 0 || selectedJobTypes.length > 0) && (
                       <Button
                         onClick={() => {
                           handleClearSearch();
                           handleClearLocations();
                           handleClearCategories();
+                          handleClearJobTypes();
                         }}
                         className="w-full"
                         size="lg"
@@ -991,6 +1160,16 @@ export function JobPostingsPage() {
                         variant="outline"
                       >
                         Clear category filter
+                      </Button>
+                    )}
+                    {selectedJobTypes.length > 0 && (
+                      <Button
+                        onClick={handleClearJobTypes}
+                        className="w-full"
+                        size="lg"
+                        variant="outline"
+                      >
+                        Clear job type filter
                       </Button>
                     )}
                   </CardContent>
