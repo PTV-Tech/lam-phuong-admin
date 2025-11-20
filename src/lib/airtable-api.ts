@@ -450,6 +450,7 @@ export async function getProductGroups(options?: {
   view?: string
   filterByFormula?: string
   sort?: Array<{ field: string; direction: 'asc' | 'desc' }>
+  fields?: string[]
 }): Promise<AirtableResponse<ProductGroupFields>> {
   const tableName = getProductGroupsTableName()
   return fetchAirtableRecords<ProductGroupFields>(tableName, options)

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ProductGroupFormDialog } from '@/components/ProductGroupFormDialog'
 import { getProductGroups, createProductGroup, updateProductGroup, deleteProductGroup, deleteProductGroups, type ProductGroupFields, type AirtableRecord } from '@/lib/airtable-api'
+import { useProductGroups } from '@/hooks/useProductGroups'
 
 export function ProductGroupsPage() {
   const [productGroups, setProductGroups] = useState<AirtableRecord<ProductGroupFields>[]>([])
@@ -14,6 +15,9 @@ export function ProductGroupsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; ids: string[] }>({ open: false, ids: [] })
   const [deleting, setDeleting] = useState(false)
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set())
+
+  // Get cache invalidation function from hook
+  const { invalidateCache } = useProductGroups()
 
   useEffect(() => {
     loadProductGroups()
@@ -35,7 +39,8 @@ export function ProductGroupsPage() {
 
   const handleCreateProductGroup = async (fields: ProductGroupFields) => {
     await createProductGroup(fields)
-    // Reload product groups after creating
+    // Invalidate cache and reload product groups after creating
+    await invalidateCache()
     await loadProductGroups()
   }
 
@@ -70,7 +75,8 @@ export function ProductGroupsPage() {
         await deleteProductGroups(idsToDelete)
       }
       
-      // Clear selection and reload
+      // Invalidate cache, clear selection and reload
+      await invalidateCache()
       setSelectedIds(new Set())
       setDeleteConfirm({ open: false, ids: [] })
       await loadProductGroups()
@@ -94,7 +100,8 @@ export function ProductGroupsPage() {
       const newStatus = currentStatus === "Active" ? "Disabled" : "Active"
       await updateProductGroup(productGroupId, { Status: newStatus })
       
-      // Update local state optimistically
+      // Invalidate cache and update local state optimistically
+      await invalidateCache()
       setProductGroups(prev => prev.map(pg => 
         pg.id === productGroupId 
           ? { ...pg, fields: { ...pg.fields, Status: newStatus } }
