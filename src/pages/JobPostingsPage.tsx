@@ -9,6 +9,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { MultiSelect } from "@/components/MultiSelect";
+import { useLazyData } from "@/hooks/useLazyData";
 import {
   getJobPostings,
   deleteJobPosting,
@@ -128,9 +130,40 @@ export function JobPostingsPage() {
   }>({ open: false, ids: [] });
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+  const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
+  const [locationFetchError, setLocationFetchError] = useState<string | null>(null);
+
+  // Lazy loading hook for locations
+  const { dataCache, loading: lazyLoading, fetchLocations } = useLazyData();
 
   // Ref to prevent duplicate calls during StrictMode double render
   const fetchingRef = useRef(false);
+
+  // Handle location fetch with error handling
+  const handleFetchLocations = useCallback(async () => {
+    try {
+      setLocationFetchError(null);
+      await fetchLocations();
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to load locations";
+      setLocationFetchError(errorMessage);
+      console.error("Error fetching locations:", err);
+      throw err; // Re-throw so MultiSelect can handle it
+    }
+  }, [fetchLocations]);
+
+  // Get locations options from API data
+  const locationOptions = useMemo(() => {
+    const locations = dataCache.locations || [];
+    return locations
+      .filter((loc) => loc.fields.Name && loc.fields.Name.trim())
+      .map((loc) => ({
+        id: loc.fields.Name || "",
+        label: loc.fields.Name || "",
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [dataCache.locations]);
 
   // Debounce search query
   useEffect(() => {
@@ -141,21 +174,41 @@ export function JobPostingsPage() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Optimized filtering with useMemo
+  // Optimized filtering with useMemo (search AND location filter)
   const filteredJobPostings = useMemo(() => {
     return jobPostings.filter((posting) => {
+      // Search filter (by title)
       const title = posting.fields["Tiêu đề"] || "";
-      return (
+      const matchesSearch =
         debouncedSearchQuery === "" ||
-        title.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
-      );
+        title.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
+
+      // Location filter (by location names in "Tên khu vực" array)
+      const matchesLocation =
+        selectedLocations.length === 0 ||
+        (() => {
+          const postingLocations = posting.fields["Tên khu vực"] || [];
+          if (postingLocations.length === 0) return false;
+
+          // Check if any posting location matches any selected location
+          return postingLocations.some((postingLoc) =>
+            selectedLocations.includes(postingLoc)
+          );
+        })();
+
+      return matchesSearch && matchesLocation;
     });
-  }, [jobPostings, debouncedSearchQuery]);
+  }, [jobPostings, debouncedSearchQuery, selectedLocations]);
 
   // Clear search function
   const handleClearSearch = useCallback(() => {
     setSearchQuery("");
     setDebouncedSearchQuery("");
+  }, []);
+
+  // Clear location filter
+  const handleClearLocations = useCallback(() => {
+    setSelectedLocations([]);
   }, []);
 
   const loadJobPostings = useCallback(async () => {
@@ -182,6 +235,10 @@ export function JobPostingsPage() {
         "Tên loại công việc",
         "Tên nhóm sản phẩm",
         "Status",
+        "Khu vực",
+        "Danh mục công việc",
+        "Loại công việc",
+        "Nhóm sản phẩm",
       ];
 
       const response = await getJobPostings({
@@ -483,71 +540,193 @@ export function JobPostingsPage() {
             </Card>
           ) : (
             <>
-              {/* Search Input */}
+              {/* Search and Filter Bar */}
               <div className="mb-6">
-                <div className="relative max-w-md">
-                  <label htmlFor="search-job-postings" className="sr-only">
-                    Search job postings
-                  </label>
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground pointer-events-none"
-                  >
-                    <circle cx="11" cy="11" r="8" />
-                    <path d="m21 21-4.35-4.35" />
-                  </svg>
-                  <input
-                    id="search-job-postings"
-                    type="text"
-                    placeholder="Search job postings... / Tìm kiếm bài tuyển dụng..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-10 py-2 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm h-10"
-                  />
-                  {searchQuery && (
+                <div className="flex flex-col sm:flex-row gap-4">
+                  {/* Search Input */}
+                  <div className="relative flex-1 sm:max-w-md">
+                    <label htmlFor="search-job-postings" className="sr-only">
+                      Search job postings
+                    </label>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground pointer-events-none"
+                    >
+                      <circle cx="11" cy="11" r="8" />
+                      <path d="m21 21-4.35-4.35" />
+                    </svg>
+                    <input
+                      id="search-job-postings"
+                      type="text"
+                      placeholder="Search job postings... / Tìm kiếm bài tuyển dụng..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-10 pr-10 py-2 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm h-10"
+                    />
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={handleClearSearch}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                        aria-label="Clear search"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="15" y1="9" x2="9" y2="15" />
+                          <line x1="9" y1="9" x2="15" y2="15" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Location Filter */}
+                  <div className="flex-1 sm:max-w-xs">
+                    <label htmlFor="location-filter" className="sr-only">
+                      Filter by location
+                    </label>
+                    <MultiSelect
+                      options={locationOptions}
+                      value={selectedLocations}
+                      onChange={setSelectedLocations}
+                      placeholder="All Locations / Tất cả khu vực"
+                      className="w-full"
+                      loading={lazyLoading.locations}
+                      onOpen={handleFetchLocations}
+                    />
+                    {locationFetchError && (
+                      <div className="mt-2 p-2 rounded-md bg-destructive/10 border border-destructive/20">
+                        <div className="flex items-start gap-2">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="text-destructive flex-shrink-0 mt-0.5"
+                          >
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="12" y1="8" x2="12" y2="12" />
+                            <line x1="12" y1="16" x2="12.01" y2="16" />
+                          </svg>
+                          <div className="flex-1">
+                            <p className="text-sm text-destructive font-medium">
+                              {locationFetchError.includes("RATE_LIMIT")
+                                ? "Too many requests. Please wait a moment and try again."
+                                : "Failed to load locations"}
+                            </p>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="mt-2"
+                              onClick={() => {
+                                setLocationFetchError(null);
+                                handleFetchLocations();
+                              }}
+                            >
+                              Retry
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Selected Location Tags */}
+                {selectedLocations.length > 0 && (
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Filtered by:</span>
+                    {selectedLocations.map((location) => (
+                      <span
+                        key={location}
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-700"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="12"
+                          height="12"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+                          <circle cx="12" cy="10" r="3" />
+                        </svg>
+                        {location}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedLocations((prev) =>
+                              prev.filter((loc) => loc !== location)
+                            )
+                          }
+                          className="ml-1 hover:text-blue-900 transition-colors"
+                          aria-label={`Remove ${location} filter`}
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="15" y1="9" x2="9" y2="15" />
+                            <line x1="9" y1="9" x2="15" y2="15" />
+                          </svg>
+                        </button>
+                      </span>
+                    ))}
                     <button
                       type="button"
-                      onClick={handleClearSearch}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                      aria-label="Clear search"
+                      onClick={handleClearLocations}
+                      className="text-sm text-blue-600 hover:text-blue-800 font-medium underline"
                     >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <circle cx="12" cy="12" r="10" />
-                        <line x1="15" y1="9" x2="9" y2="15" />
-                        <line x1="9" y1="9" x2="15" y2="15" />
-                      </svg>
+                      Clear all
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
 
               {/* Result Count */}
-              {debouncedSearchQuery && (
+              {(debouncedSearchQuery || selectedLocations.length > 0) && (
                 <div className="mb-4 text-sm text-muted-foreground">
                   Showing {filteredJobPostings.length} of {jobPostings.length}{" "}
                   job posting{jobPostings.length !== 1 ? "s" : ""}
                 </div>
               )}
 
-              {/* Empty State for Search Results */}
+              {/* Empty State for Search/Filter Results */}
               {filteredJobPostings.length === 0 ? (
                 <Card className="max-w-md mx-auto border-dashed">
                   <CardHeader className="text-center py-12">
@@ -569,22 +748,51 @@ export function JobPostingsPage() {
                         <line x1="8.5" y1="8.5" x2="15.5" y2="15.5" />
                       </svg>
                     </div>
-                    <CardTitle>
-                      No job postings found for '{debouncedSearchQuery}'
-                    </CardTitle>
+                    <CardTitle>No job postings found</CardTitle>
                     <CardDescription className="mt-2">
-                      Try adjusting your search
+                      {debouncedSearchQuery && selectedLocations.length > 0
+                        ? `No job postings match "${debouncedSearchQuery}" in selected locations`
+                        : debouncedSearchQuery
+                        ? `No job postings match "${debouncedSearchQuery}"`
+                        : selectedLocations.length > 0
+                        ? "No job postings found in selected locations"
+                        : "Try adjusting your search or filters"}
                     </CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <Button
-                      onClick={handleClearSearch}
-                      className="w-full"
-                      size="lg"
-                      variant="outline"
-                    >
-                      Clear Search
-                    </Button>
+                  <CardContent className="space-y-2">
+                    {(debouncedSearchQuery || selectedLocations.length > 0) && (
+                      <Button
+                        onClick={() => {
+                          handleClearSearch();
+                          handleClearLocations();
+                        }}
+                        className="w-full"
+                        size="lg"
+                        variant="outline"
+                      >
+                        Clear all filters
+                      </Button>
+                    )}
+                    {debouncedSearchQuery && (
+                      <Button
+                        onClick={handleClearSearch}
+                        className="w-full"
+                        size="lg"
+                        variant="outline"
+                      >
+                        Clear search
+                      </Button>
+                    )}
+                    {selectedLocations.length > 0 && (
+                      <Button
+                        onClick={handleClearLocations}
+                        className="w-full"
+                        size="lg"
+                        variant="outline"
+                      >
+                        Clear location filter
+                      </Button>
+                    )}
                   </CardContent>
                 </Card>
               ) : (

@@ -88,6 +88,9 @@ export const useLazyData = () => {
 
         // Cache the result
         setDataCache(prev => ({ ...prev, [type]: activeRecords }))
+        
+        // Set loading to false immediately after successful fetch
+        setLoading(prev => ({ ...prev, [type]: false }))
 
         return activeRecords
       } catch (error) {
@@ -101,14 +104,16 @@ export const useLazyData = () => {
 
         // Show error to user
         console.error(`Error fetching ${type}:`, error)
+        
+        // Set loading to false on error (after all retries exhausted)
+        setLoading(prev => ({ ...prev, [type]: false }))
+        
         throw error
-      } finally {
-        if (i === retries) {
-          setLoading(prev => ({ ...prev, [type]: false }))
-        }
       }
     }
 
+    // Fallback: ensure loading is false if we somehow exit the loop
+    setLoading(prev => ({ ...prev, [type]: false }))
     return null
   }, [])
 
