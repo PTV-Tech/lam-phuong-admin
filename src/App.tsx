@@ -1,17 +1,27 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { LoginPage } from '@/pages/LoginPage'
-import { DashboardPage } from '@/pages/DashboardPage'
-import { LocationsPage } from '@/pages/LocationsPage'
-import { ProductGroupsPage } from '@/pages/ProductGroupsPage'
-import { JobCategoriesPage } from '@/pages/JobCategoriesPage'
-import { JobTypesPage } from '@/pages/JobTypesPage'
-import { JobPostingsPage } from '@/pages/JobPostingsPage'
-import { JobPostingFormPage } from '@/pages/JobPostingFormPage'
 import { OAuthCallbackPage } from '@/pages/OAuthCallbackPage'
+
+// Lazy load heavy pages for code splitting
+const DashboardPage = lazy(() => import('@/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
+const LocationsPage = lazy(() => import('@/pages/LocationsPage').then(m => ({ default: m.LocationsPage })))
+const ProductGroupsPage = lazy(() => import('@/pages/ProductGroupsPage').then(m => ({ default: m.ProductGroupsPage })))
+const JobCategoriesPage = lazy(() => import('@/pages/JobCategoriesPage').then(m => ({ default: m.JobCategoriesPage })))
+const JobTypesPage = lazy(() => import('@/pages/JobTypesPage').then(m => ({ default: m.JobTypesPage })))
+const JobPostingsPage = lazy(() => import('@/pages/JobPostingsPage').then(m => ({ default: m.JobPostingsPage })))
+const JobPostingFormPage = lazy(() => import('@/pages/JobPostingFormPage').then(m => ({ default: m.JobPostingFormPage })))
+
+// Loading fallback component
+const PageLoader = () => (
+  <div className="flex items-center justify-center min-h-screen">
+    <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent"></div>
+  </div>
+)
 
 // Create a QueryClient with default options optimized for caching
 const queryClient = new QueryClient({
@@ -48,7 +58,9 @@ function App() {
             path="/dashboard"
             element={
               <ProtectedRoute>
-                <DashboardPage />
+                <Suspense fallback={<PageLoader />}>
+                  <DashboardPage />
+                </Suspense>
               </ProtectedRoute>
             }
           />
@@ -56,7 +68,9 @@ function App() {
             path="/locations"
             element={
               <ProtectedRoute>
-                <LocationsPage />
+                <Suspense fallback={<PageLoader />}>
+                  <LocationsPage />
+                </Suspense>
               </ProtectedRoute>
             }
           />
@@ -64,7 +78,9 @@ function App() {
             path="/product-groups"
             element={
               <ProtectedRoute>
-                <ProductGroupsPage />
+                <Suspense fallback={<PageLoader />}>
+                  <ProductGroupsPage />
+                </Suspense>
               </ProtectedRoute>
             }
           />
@@ -72,7 +88,9 @@ function App() {
             path="/job-categories"
             element={
               <ProtectedRoute>
-                <JobCategoriesPage />
+                <Suspense fallback={<PageLoader />}>
+                  <JobCategoriesPage />
+                </Suspense>
               </ProtectedRoute>
             }
           />
@@ -80,7 +98,9 @@ function App() {
             path="/job-types"
             element={
               <ProtectedRoute>
-                <JobTypesPage />
+                <Suspense fallback={<PageLoader />}>
+                  <JobTypesPage />
+                </Suspense>
               </ProtectedRoute>
             }
           />
@@ -88,7 +108,9 @@ function App() {
             path="/job-postings"
             element={
               <ProtectedRoute>
-                <JobPostingsPage />
+                <Suspense fallback={<PageLoader />}>
+                  <JobPostingsPage />
+                </Suspense>
               </ProtectedRoute>
             }
           />
@@ -96,7 +118,9 @@ function App() {
             path="/job-postings/new"
             element={
               <ProtectedRoute>
-                <JobPostingFormPage />
+                <Suspense fallback={<PageLoader />}>
+                  <JobPostingFormPage />
+                </Suspense>
               </ProtectedRoute>
             }
           />
@@ -104,7 +128,9 @@ function App() {
             path="/job-postings/:id/edit"
             element={
               <ProtectedRoute>
-                <JobPostingFormPage />
+                <Suspense fallback={<PageLoader />}>
+                  <JobPostingFormPage />
+                </Suspense>
               </ProtectedRoute>
             }
           />

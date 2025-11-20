@@ -1,5 +1,8 @@
-import ReactMarkdown from 'react-markdown'
+import { lazy, Suspense } from 'react'
 import { type Components } from 'react-markdown'
+
+// Lazy load react-markdown
+const ReactMarkdown = lazy(() => import('react-markdown').then(m => ({ default: m.default })))
 
 interface MarkdownRendererProps {
   content: string
@@ -64,10 +67,20 @@ const markdownComponents: Components = {
   ),
 }
 
+const MarkdownLoader = () => (
+  <div className="animate-pulse">
+    <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+    <div className="h-4 bg-gray-200 rounded w-full mb-2"></div>
+    <div className="h-4 bg-gray-200 rounded w-5/6"></div>
+  </div>
+)
+
 export function MarkdownRenderer({ content, className = '' }: MarkdownRendererProps) {
   return (
     <div className={`markdown-content ${className}`}>
-      <ReactMarkdown components={markdownComponents}>{content}</ReactMarkdown>
+      <Suspense fallback={<MarkdownLoader />}>
+        <ReactMarkdown components={markdownComponents}>{content}</ReactMarkdown>
+      </Suspense>
     </div>
   )
 }

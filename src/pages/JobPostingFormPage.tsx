@@ -8,8 +8,7 @@ import { Label } from '@/components/ui/label'
 import { MultiSelect } from '@/components/MultiSelect'
 import { SingleSelect } from '@/components/SingleSelect'
 import { JobPostingPreview } from '@/components/JobPostingPreview'
-import SimpleMDE from 'react-simplemde-editor'
-import 'easymde/dist/easymde.min.css'
+import { LazySimpleMDE } from '@/components/LazySimpleMDE'
 import slugify from 'slugify'
 import {
   getJobPostings,
@@ -547,7 +546,7 @@ export function JobPostingFormPage() {
                   <Label className="text-sm font-medium text-foreground">
                     Mô tả công việc
                   </Label>
-                  <SimpleMDE
+                  <LazySimpleMDE
                     value={formData['Mô tả công việc'] || ''}
                     onChange={(value) => setFormData(prev => ({ ...prev, 'Mô tả công việc': value }))}
                     options={simpleMDEConfig}
@@ -559,7 +558,7 @@ export function JobPostingFormPage() {
                   <Label className="text-sm font-medium text-foreground">
                     Yêu cầu
                   </Label>
-                  <SimpleMDE
+                  <LazySimpleMDE
                     value={formData['Yêu cầu'] || ''}
                     onChange={(value) => setFormData(prev => ({ ...prev, 'Yêu cầu': value }))}
                     options={simpleMDEConfig}
@@ -571,7 +570,7 @@ export function JobPostingFormPage() {
                   <Label className="text-sm font-medium text-foreground">
                     Quyền lợi
                   </Label>
-                  <SimpleMDE
+                  <LazySimpleMDE
                     value={formData['Quyền lợi'] || ''}
                     onChange={(value) => setFormData(prev => ({ ...prev, 'Quyền lợi': value }))}
                     options={simpleMDEConfig}

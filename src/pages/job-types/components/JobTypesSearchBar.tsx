@@ -2,6 +2,8 @@
  * Search and filter bar component for Job Types page
  */
 
+import { SingleSelect } from '@/components/SingleSelect'
+
 interface JobTypesSearchBarProps {
   searchQuery: string
   onSearchChange: (value: string) => void
@@ -74,15 +76,19 @@ export function JobTypesSearchBar({
             </button>
           )}
         </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => onStatusFilterChange(e.target.value)}
-          className="px-4 py-2 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm cursor-pointer"
-        >
-          <option value="all">All Status</option>
-          <option value="Active">Active</option>
-          <option value="Disabled">Disabled</option>
-        </select>
+        <div className="w-full sm:w-auto sm:min-w-[180px]">
+          <SingleSelect
+            options={[
+              { id: 'all', label: 'All Status' },
+              { id: 'Active', label: 'Active' },
+              { id: 'Disabled', label: 'Disabled' },
+            ]}
+            value={statusFilter}
+            onChange={(value) => onStatusFilterChange(value || 'all')}
+            placeholder="Filter by status..."
+            className="w-full"
+          />
+        </div>
       </div>
       {/* Result Count */}
       {hasActiveFilters && (
