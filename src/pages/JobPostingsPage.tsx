@@ -771,10 +771,11 @@ export function JobPostingsPage() {
           ) : (
             <>
               {/* Search and Filter Bar */}
-              <div className="mb-6">
-                <div className="flex flex-col sm:flex-row gap-4">
-                  {/* Search Input */}
-                  <div className="relative flex-1 sm:max-w-md">
+              <div className="mb-6 space-y-5">
+                {/* Row 1: Search and Status */}
+                <div className="flex flex-col md:flex-row gap-4">
+                  {/* Search Input - Wider on desktop */}
+                  <div className="relative flex-1 md:flex-[2] lg:flex-[3]">
                     <label htmlFor="search-job-postings" className="sr-only">
                       Search job postings
                     </label>
@@ -788,7 +789,7 @@ export function JobPostingsPage() {
                       strokeWidth="2"
                       strokeLinecap="round"
                       strokeLinejoin="round"
-                      className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground pointer-events-none"
+                      className="absolute left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground pointer-events-none"
                     >
                       <circle cx="11" cy="11" r="8" />
                       <path d="m21 21-4.35-4.35" />
@@ -799,13 +800,13 @@ export function JobPostingsPage() {
                       placeholder="Search job postings... / Tìm kiếm bài tuyển dụng..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-10 pr-10 py-2 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm h-10"
+                      className="w-full pl-11 pr-11 py-3 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm md:text-base h-12"
                     />
                     {searchQuery && (
                       <button
                         type="button"
                         onClick={handleClearSearch}
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                        className="absolute right-4 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                         aria-label="Clear search"
                       >
                         <svg
@@ -827,8 +828,31 @@ export function JobPostingsPage() {
                     )}
                   </div>
 
+                  {/* Status Filter - Right side on desktop */}
+                  <div className="w-full md:w-auto md:min-w-[200px] lg:min-w-[240px]">
+                    <label htmlFor="status-filter" className="sr-only">
+                      Filter by status
+                    </label>
+                    <select
+                      id="status-filter"
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm md:text-base h-12 cursor-pointer hover:border-gray-400"
+                    >
+                      <option value="all">All Status / Tất cả trạng thái</option>
+                      <option value="active">Active / Đang hoạt động</option>
+                      <option value="approved">Approved / Đã duyệt</option>
+                      <option value="pending">Pending / Chờ duyệt</option>
+                      <option value="rejected">Rejected / Từ chối</option>
+                      <option value="expired">Expired / Hết hạn</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Row 2: Multi-select Filters */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   {/* Location Filter */}
-                  <div className="flex-1 sm:max-w-xs">
+                  <div>
                     <label htmlFor="location-filter" className="sr-only">
                       Filter by location
                     </label>
@@ -885,7 +909,7 @@ export function JobPostingsPage() {
                   </div>
 
                   {/* Job Categories Filter */}
-                  <div className="flex-1 sm:max-w-xs">
+                  <div>
                     <label htmlFor="category-filter" className="sr-only">
                       Filter by job category
                     </label>
@@ -942,7 +966,7 @@ export function JobPostingsPage() {
                   </div>
 
                   {/* Job Types Filter */}
-                  <div className="flex-1 sm:max-w-xs">
+                  <div>
                     <label htmlFor="job-type-filter" className="sr-only">
                       Filter by job type
                     </label>
@@ -999,7 +1023,7 @@ export function JobPostingsPage() {
                   </div>
 
                   {/* Product Groups Filter */}
-                  <div className="flex-1 sm:max-w-xs">
+                  <div>
                     <label htmlFor="product-group-filter" className="sr-only">
                       Filter by product group
                     </label>
@@ -1053,26 +1077,6 @@ export function JobPostingsPage() {
                         </div>
                       </div>
                     )}
-                  </div>
-
-                  {/* Status Filter */}
-                  <div className="flex-1 sm:max-w-xs">
-                    <label htmlFor="status-filter" className="sr-only">
-                      Filter by status
-                    </label>
-                    <select
-                      id="status-filter"
-                      value={statusFilter}
-                      onChange={(e) => setStatusFilter(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm h-10 cursor-pointer"
-                    >
-                      <option value="all">All Status / Tất cả trạng thái</option>
-                      <option value="active">Active / Đang hoạt động</option>
-                      <option value="approved">Approved / Đã duyệt</option>
-                      <option value="pending">Pending / Chờ duyệt</option>
-                      <option value="rejected">Rejected / Từ chối</option>
-                      <option value="expired">Expired / Hết hạn</option>
-                    </select>
                   </div>
                 </div>
 

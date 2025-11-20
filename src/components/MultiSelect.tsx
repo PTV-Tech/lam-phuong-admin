@@ -87,15 +87,16 @@ export function MultiSelect({
         onClick={handleToggle}
         disabled={disabled}
         className={cn(
-          'w-full min-h-[42px] px-3 py-2 text-left border border-input rounded-md bg-background',
-          'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
-          'disabled:cursor-not-allowed disabled:opacity-50',
+          'w-full h-12 px-4 py-3 text-left border border-gray-300 rounded-lg bg-white',
+          'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent',
+          'hover:border-gray-400 transition-all',
+          'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-gray-300',
           'flex items-center justify-between gap-2',
           className
         )}
       >
         <span className={cn(
-          'flex-1 text-sm',
+          'flex-1 text-sm md:text-base truncate',
           selectedLabels.length === 0 ? 'text-muted-foreground' : 'text-foreground'
         )}>
           {loading
